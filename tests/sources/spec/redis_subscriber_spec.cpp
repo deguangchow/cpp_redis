@@ -147,6 +147,17 @@ TEST(RedisSubscriber, PUnsubscribeNotConnected) {
   EXPECT_NO_THROW(client.punsubscribe("/chan/*"));
 }
 
+//! Auth(password)
+#define AUTH(client) {\
+    const std::string& password = "FRaqbC8wSA1XvpFVjCRGryWtIIZS2TRqf69aZbLAX3cf3ednHM3SOlbpH71yEXUIEAOeIiGXix4A2DreBBsQwY6YHkidcDjoYAPNXRPmcarcR4ZDgC81TbdkSmLAztxc";\
+    client.auth(password, [](cpp_redis::reply& reply) {\
+        if (reply.is_error()) { std::cerr << "Authentication failed: " << reply.as_string() << std::endl; }\
+        else {\
+            std::cout << "successful authentication" << std::endl;\
+        }\
+    });\
+}
+
 TEST(RedisSubscriber, SubConnectedCommitConnected) {
   cpp_redis::subscriber sub;
   cpp_redis::client client;
@@ -154,6 +165,8 @@ TEST(RedisSubscriber, SubConnectedCommitConnected) {
 
   sub.connect();
   client.connect();
+  AUTH(sub);
+  AUTH(client);
 
   std::atomic<bool> callback_run = ATOMIC_VAR_INIT(false);
   sub.subscribe("/chan",
@@ -181,6 +194,9 @@ TEST(RedisSubscriber, SubNotConnectedCommitConnected) {
   std::condition_variable cv;
 
   client.connect();
+  AUTH(client);
+  sub.connect();
+  AUTH(sub);
 
   std::atomic<bool> callback_run = ATOMIC_VAR_INIT(false);
   sub.subscribe("/chan",
@@ -193,7 +209,6 @@ TEST(RedisSubscriber, SubNotConnectedCommitConnected) {
       client.commit();
     });
 
-  sub.connect();
   sub.commit();
 
   std::mutex mutex;
@@ -223,7 +238,7 @@ TEST(RedisSubscriber, SubNotConnectedCommitNotConnectedCommitConnected) {
   sub.connect();
   sub.commit();
 
-  std::this_thread::sleep_for(std::chrono::seconds(2));
+  std::this_thread::sleep_for(std::chrono::milliseconds(2));
 
   //! all commands that failed to be sent with the first commit should not be resent on 2nd commit
   EXPECT_FALSE(callback_run);
@@ -235,7 +250,9 @@ TEST(RedisSubscriber, SubscribeSomethingPublished) {
   std::condition_variable cv;
 
   sub.connect();
+  AUTH(sub);
   client.connect();
+  AUTH(client);
 
   std::atomic<bool> callback_run = ATOMIC_VAR_INIT(false);
   sub.subscribe("/chan",
@@ -254,7 +271,7 @@ TEST(RedisSubscriber, SubscribeSomethingPublished) {
 
   std::mutex mutex;
   std::unique_lock<std::mutex> lock(mutex);
-  cv.wait_for(lock, std::chrono::seconds(10), [&]() -> bool { return callback_run; });
+  cv.wait_for(lock, std::chrono::milliseconds(10), [&]() -> bool { return callback_run; });
 
   EXPECT_TRUE(callback_run);
 }
@@ -265,7 +282,9 @@ TEST(RedisSubscriber, SubscribeMultiplePublished) {
   std::condition_variable cv;
 
   sub.connect();
+  AUTH(sub);
   client.connect();
+  AUTH(client);
 
   std::atomic<int> number_times_called = ATOMIC_VAR_INIT(0);
   sub.subscribe("/chan",
@@ -288,7 +307,7 @@ TEST(RedisSubscriber, SubscribeMultiplePublished) {
 
   std::mutex mutex;
   std::unique_lock<std::mutex> lock(mutex);
-  cv.wait_for(lock, std::chrono::seconds(10), [&]() -> bool { return number_times_called == 2; });
+  cv.wait_for(lock, std::chrono::milliseconds(10), [&]() -> bool { return number_times_called == 2; });
 
   EXPECT_TRUE(number_times_called == 2);
 }
@@ -312,7 +331,7 @@ TEST(RedisSubscriber, SubscribeNothingPublished) {
 
   sub.commit();
 
-  std::this_thread::sleep_for(std::chrono::seconds(2));
+  std::this_thread::sleep_for(std::chrono::milliseconds(2));
 
   EXPECT_FALSE(callback_run);
 }
@@ -323,7 +342,9 @@ TEST(RedisSubscriber, MultipleSubscribeSomethingPublished) {
   std::condition_variable cv;
 
   sub.connect();
+  AUTH(sub);
   client.connect();
+  AUTH(client);
 
   auto ack_callback = [&](int64_t nb_chans) {
     if (nb_chans == 2) {
@@ -360,7 +381,7 @@ TEST(RedisSubscriber, MultipleSubscribeSomethingPublished) {
 
   std::mutex mutex;
   std::unique_lock<std::mutex> lock(mutex);
-  cv.wait_for(lock, std::chrono::seconds(10), [&]() -> bool { return callback_1_run && callback_2_run; });
+  cv.wait_for(lock, std::chrono::milliseconds(10), [&]() -> bool { return callback_1_run && callback_2_run; });
 
   EXPECT_TRUE(callback_1_run);
   EXPECT_TRUE(callback_2_run);
@@ -372,7 +393,9 @@ TEST(RedisSubscriber, PSubscribeSomethingPublished) {
   std::condition_variable cv;
 
   sub.connect();
+  AUTH(sub);
   client.connect();
+  AUTH(client);
 
   std::atomic<bool> callback_run = ATOMIC_VAR_INIT(false);
   sub.psubscribe("/chan/*",
@@ -391,7 +414,7 @@ TEST(RedisSubscriber, PSubscribeSomethingPublished) {
 
   std::mutex mutex;
   std::unique_lock<std::mutex> lock(mutex);
-  cv.wait_for(lock, std::chrono::seconds(10), [&]() -> bool { return callback_run; });
+  cv.wait_for(lock, std::chrono::milliseconds(10), [&]() -> bool { return callback_run; });
 
   EXPECT_TRUE(callback_run);
 }
@@ -402,7 +425,9 @@ TEST(RedisSubscriber, PSubscribeMultiplePublished) {
   std::condition_variable cv;
 
   sub.connect();
+  AUTH(sub);
   client.connect();
+  AUTH(client);
 
   std::atomic<int> number_times_called = ATOMIC_VAR_INIT(0);
   sub.psubscribe("/chan/*",
@@ -432,7 +457,7 @@ TEST(RedisSubscriber, PSubscribeMultiplePublished) {
 
   std::mutex mutex;
   std::unique_lock<std::mutex> lock(mutex);
-  cv.wait_for(lock, std::chrono::seconds(10), [&]() -> bool { return number_times_called == 2; });
+  cv.wait_for(lock, std::chrono::milliseconds(10), [&]() -> bool { return number_times_called == 2; });
 
   EXPECT_TRUE(number_times_called == 2);
 }
@@ -456,7 +481,7 @@ TEST(RedisSubscriber, PSubscribeNothingPublished) {
 
   sub.commit();
 
-  std::this_thread::sleep_for(std::chrono::seconds(2));
+  std::this_thread::sleep_for(std::chrono::milliseconds(2));
 
   EXPECT_FALSE(callback_run);
 }
@@ -467,7 +492,9 @@ TEST(RedisSubscriber, MultiplePSubscribeSomethingPublished) {
   std::condition_variable cv;
 
   sub.connect();
+  AUTH(sub);
   client.connect();
+  AUTH(client);
 
   auto ack_callback = [&](int64_t nb_chans) {
     if (nb_chans == 2) {
@@ -504,7 +531,7 @@ TEST(RedisSubscriber, MultiplePSubscribeSomethingPublished) {
 
   std::mutex mutex;
   std::unique_lock<std::mutex> lock(mutex);
-  cv.wait_for(lock, std::chrono::seconds(10), [&]() -> bool { return callback_1_run && callback_2_run; });
+  cv.wait_for(lock, std::chrono::milliseconds(10), [&]() -> bool { return callback_1_run && callback_2_run; });
 
   EXPECT_TRUE(callback_1_run);
   EXPECT_TRUE(callback_2_run);
@@ -516,7 +543,9 @@ TEST(RedisSubscriber, Unsubscribe) {
   std::condition_variable cv;
 
   sub.connect();
+  AUTH(sub);
   client.connect();
+  AUTH(client);
 
   auto ack_callback = [&](int64_t nb_chans) {
     if (nb_chans == 2) {
@@ -545,7 +574,7 @@ TEST(RedisSubscriber, Unsubscribe) {
 
   std::mutex mutex;
   std::unique_lock<std::mutex> lock(mutex);
-  cv.wait_for(lock, std::chrono::seconds(10), [&]() -> bool { return callback_2_run; });
+  cv.wait_for(lock, std::chrono::milliseconds(10), [&]() -> bool { return callback_2_run; });
 
   EXPECT_FALSE(callback_1_run);
   EXPECT_TRUE(callback_2_run);
@@ -557,7 +586,9 @@ TEST(RedisSubscriber, PUnsubscribe) {
   std::condition_variable cv;
 
   sub.connect();
+  AUTH(sub);
   client.connect();
+  AUTH(client);
 
   auto ack_callback = [&](int64_t nb_chans) {
     if (nb_chans == 2) {
@@ -586,7 +617,7 @@ TEST(RedisSubscriber, PUnsubscribe) {
 
   std::mutex mutex;
   std::unique_lock<std::mutex> lock(mutex);
-  cv.wait_for(lock, std::chrono::seconds(10), [&]() -> bool { return callback_2_run; });
+  cv.wait_for(lock, std::chrono::milliseconds(10), [&]() -> bool { return callback_2_run; });
 
   EXPECT_FALSE(callback_1_run);
   EXPECT_TRUE(callback_2_run);

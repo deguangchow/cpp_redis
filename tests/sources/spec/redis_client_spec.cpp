@@ -203,10 +203,22 @@ TEST(RedisClient, SendNotConnectedSyncCommitNotConnectedSyncCommitConnected) {
   EXPECT_TRUE(callback_run);
 }
 
+//! Auth(password)
+#define AUTH(client) {\
+    const std::string& password = "FRaqbC8wSA1XvpFVjCRGryWtIIZS2TRqf69aZbLAX3cf3ednHM3SOlbpH71yEXUIEAOeIiGXix4A2DreBBsQwY6YHkidcDjoYAPNXRPmcarcR4ZDgC81TbdkSmLAztxc";\
+    client.auth(password, [](cpp_redis::reply& reply) {\
+        if (reply.is_error()) { std::cerr << "Authentication failed: " << reply.as_string() << std::endl; }\
+        else {\
+            std::cout << "successful authentication" << std::endl;\
+        }\
+    });\
+}
+
 TEST(RedisClient, Send) {
   cpp_redis::client client;
 
   client.connect();
+  AUTH(client);
   client.send({"PING"}, [&](cpp_redis::reply& reply) {
     EXPECT_TRUE(reply.is_string());
     EXPECT_TRUE(reply.as_string() == "PONG");
@@ -218,7 +230,7 @@ TEST(RedisClient, MultipleSend) {
   cpp_redis::client client;
 
   client.connect();
-
+  AUTH(client);
   client.send({"PING"}, [&](cpp_redis::reply& reply) {
     EXPECT_TRUE(reply.is_string());
     EXPECT_TRUE(reply.as_string() == "PONG");
@@ -242,7 +254,7 @@ TEST(RedisClient, MultipleSendPipeline) {
   cpp_redis::client client;
 
   client.connect();
-
+  AUTH(client);
   client.send({"PING"}, [&](cpp_redis::reply& reply) {
     EXPECT_TRUE(reply.is_string());
     EXPECT_TRUE(reply.as_string() == "PONG");
@@ -305,6 +317,7 @@ TEST(RedisClient, ClearBufferOnError) {
   cpp_redis::client client;
 
   client.connect();
+  AUTH(client);
   client.send({"SET", "HELLO", "BEFORE"});
   client.sync_commit();
   client.disconnect();
@@ -317,7 +330,8 @@ TEST(RedisClient, ClearBufferOnError) {
   EXPECT_THROW(client.sync_commit(), cpp_redis::redis_error);
 
   client.connect();
-  client.send({"GET", "HELLO"}, [&](cpp_redis::reply& reply) {
+  AUTH(client);
+  client.send({ "GET", "HELLO" }, [&](cpp_redis::reply& reply) {
     EXPECT_TRUE(reply.is_string());
     EXPECT_TRUE(reply.as_string() == "BEFORE");
   });
@@ -328,6 +342,7 @@ TEST(RedisClient, ClearBufferOnUserDisconnect) {
   cpp_redis::client client;
 
   client.connect();
+  AUTH(client);
   client.send({"SET", "HELLO", "BEFORE"});
   client.sync_commit();
 
@@ -338,6 +353,7 @@ TEST(RedisClient, ClearBufferOnUserDisconnect) {
   client.disconnect();
 
   client.connect();
+  AUTH(client);
   client.send({"GET", "HELLO"}, [&](cpp_redis::reply& reply) {
     EXPECT_TRUE(reply.is_string());
     EXPECT_EQ(reply.as_string(), "BEFORE");
