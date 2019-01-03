@@ -31,47 +31,68 @@
 int
 main(void) {
 #ifdef _WIN32
-  //! Windows netword DLL init
-  WORD version = MAKEWORD(2, 2);
-  WSADATA data;
+    //! Windows netword DLL init
+    WORD version = MAKEWORD(2, 2);
+    WSADATA data;
 
-  if (WSAStartup(version, &data) != 0) {
-    std::cerr << "WSAStartup() failure" << std::endl;
-    return -1;
-  }
+    if (WSAStartup(version, &data) != 0) {
+        std::cerr << "WSAStartup() failure" << std::endl;
+        return -1;
+    }
 #endif /* _WIN32 */
 
-  //! Enable logging
-  cpp_redis::active_logger = std::unique_ptr<cpp_redis::logger>(new cpp_redis::logger);
+    //! Enable logging
+    cpp_redis::active_logger = std::unique_ptr<cpp_redis::logger>(new cpp_redis::logger);
 
-  cpp_redis::client client;
+    cpp_redis::client client;
 
-  client.connect("127.0.0.1", 6379, [](const std::string& host, std::size_t port, cpp_redis::client::connect_state status) {
-    if (status == cpp_redis::client::connect_state::dropped) {
-      std::cout << "client disconnected from " << host << ":" << port << std::endl;
-    }
-  });
+    client.connect("127.0.0.1", 6379, [](const std::string& host, std::size_t port, cpp_redis::client::connect_state status) {
+        if (status == cpp_redis::client::connect_state::dropped) {
+            std::cout << "client disconnected from " << host << ":" << port << std::endl;
+        }
+    });
 
-  // same as client.send({ "SET", "hello", "42" }, ...)
-  client.set("hello", "42", [](cpp_redis::reply& reply) {
-    std::cout << "set hello 42: " << reply << std::endl;
-    // if (reply.is_string())
-    //   do_something_with_string(reply.as_string())
-  });
+    //! Auth(password)
+    const std::string& password = "FRaqbC8wSA1XvpFVjCRGryWtIIZS2TRqf69aZbLAX3cf3ednHM3SOlbpH71yEXUIEAOeIiGXix4A2DreBBsQwY6YHkidcDjoYAPNXRPmcarcR4ZDgC81TbdkSmLAztxc";
+    client.auth(password, [](cpp_redis::reply& reply) {
+        if (reply.is_error()) { std::cerr << "Authentication failed: " << reply.as_string() << std::endl; }
+        else {
+            std::cout << "successful authentication" << std::endl;
+        }
+    });
 
-  // same as client.send({ "DECRBY", "hello", 12 }, ...)
-  client.decrby("hello", 12, [](cpp_redis::reply& reply) {
-    std::cout << "decrby hello 12: " << reply << std::endl;
-    // if (reply.is_integer())
-    //   do_something_with_integer(reply.as_integer())
-  });
+#if 0
+    // same as client.send({ "SET", "hello", "42" }, ...)
+    client.set("hello", "42", [](cpp_redis::reply& reply) {
+        std::cout << "set hello 42: " << reply << std::endl;
+        // if (reply.is_string())
+        //   do_something_with_string(reply.as_string())
+    });
 
-  // same as client.send({ "GET", "hello" }, ...)
-  client.get("hello", [](cpp_redis::reply& reply) {
-    std::cout << "get hello: " << reply << std::endl;
-    // if (reply.is_string())
-    //   do_something_with_string(reply.as_string())
-  });
+    // same as client.send({ "DECRBY", "hello", 12 }, ...)
+    client.decrby("hello", 12, [](cpp_redis::reply& reply) {
+        std::cout << "decrby hello 12: " << reply << std::endl;
+        // if (reply.is_integer())
+        //   do_something_with_integer(reply.as_integer())
+    });
+
+    // same as client.send({ "GET", "hello" }, ...)
+    client.get("hello", [](cpp_redis::reply& reply) {
+        std::cout << "get hello: " << reply << std::endl;
+        // if (reply.is_string())
+        //   do_something_with_string(reply.as_string())
+    });
+#endif
+
+    //publish
+    client.publish("some_chan1", "msg1: this is a message", [](cpp_redis::reply& reply) {
+        std::cout << "publish some_chan1: " << reply << std::endl;
+    });
+
+    //pubsub
+    client.pubsub("CHANNELS", {}, [](cpp_redis::reply& reply) {
+        std::cout << "pubsub CHANNELS: " << reply << std::endl;
+    });
 
   // commands are pipelined and only sent when client.commit() is called
   // client.commit();

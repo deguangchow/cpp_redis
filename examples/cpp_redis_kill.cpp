@@ -50,6 +50,15 @@ main(void) {
     }
   });
 
+  //! Auth(password)
+  const std::string& password = "FRaqbC8wSA1XvpFVjCRGryWtIIZS2TRqf69aZbLAX3cf3ednHM3SOlbpH71yEXUIEAOeIiGXix4A2DreBBsQwY6YHkidcDjoYAPNXRPmcarcR4ZDgC81TbdkSmLAztxc";
+  client.auth(password, [](cpp_redis::reply& reply) {
+      if (reply.is_error()) { std::cerr << "Authentication failed: " << reply.as_string() << std::endl; }
+      else {
+          std::cout << "successful authentication" << std::endl;
+      }
+  });
+
   //! client kill ip:port
   client.client_list([&client](cpp_redis::reply& reply) {
     std::string addr;
@@ -75,6 +84,15 @@ main(void) {
       if (status == cpp_redis::client::connect_state::dropped) {
         std::cout << "client disconnected from " << host << ":" << port << std::endl;
       }
+    });
+
+    //! Auth(password)
+    const std::string& password = "FRaqbC8wSA1XvpFVjCRGryWtIIZS2TRqf69aZbLAX3cf3ednHM3SOlbpH71yEXUIEAOeIiGXix4A2DreBBsQwY6YHkidcDjoYAPNXRPmcarcR4ZDgC81TbdkSmLAztxc";
+    client.auth(password, [](cpp_redis::reply& reply) {
+        if (reply.is_error()) { std::cerr << "Authentication failed: " << reply.as_string() << std::endl; }
+        else {
+            std::cout << "successful authentication" << std::endl;
+        }
     });
   }
 

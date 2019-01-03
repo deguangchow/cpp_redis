@@ -52,6 +52,15 @@ main(void) {
     }
   });
 
+  //! Auth(password)
+  const std::string& password = "FRaqbC8wSA1XvpFVjCRGryWtIIZS2TRqf69aZbLAX3cf3ednHM3SOlbpH71yEXUIEAOeIiGXix4A2DreBBsQwY6YHkidcDjoYAPNXRPmcarcR4ZDgC81TbdkSmLAztxc";
+  client.auth(password, [](cpp_redis::reply& reply) {
+      if (reply.is_error()) { std::cerr << "Authentication failed: " << reply.as_string() << std::endl; }
+      else {
+          std::cout << "successful authentication" << std::endl;
+      }
+  });
+
   //! Set a value
   auto set    = client.set("hello", "42");
   auto decrby = client.decrby("hello", 12);

@@ -61,6 +61,15 @@ main(void) {
   },
     0, -1, 5000);
 
+  //! Auth(password)
+  const std::string& password = "FRaqbC8wSA1XvpFVjCRGryWtIIZS2TRqf69aZbLAX3cf3ednHM3SOlbpH71yEXUIEAOeIiGXix4A2DreBBsQwY6YHkidcDjoYAPNXRPmcarcR4ZDgC81TbdkSmLAztxc";
+  client.auth(password, [](cpp_redis::reply& reply) {
+      if (reply.is_error()) { std::cerr << "Authentication failed: " << reply.as_string() << std::endl; }
+      else {
+          std::cout << "successful authentication" << std::endl;
+      }
+  });
+
   // same as client.send({ "SET", "hello", "42" }, ...)
   client.set("hello", "42", [](cpp_redis::reply& reply) {
     std::cout << "set hello 42: " << reply << std::endl;
