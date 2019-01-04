@@ -264,6 +264,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\sources\main.cpp" />
+    <ClCompile Include="..\sources\spec\redis_client_spec.cpp" />
     <ClCompile Include="..\sources\spec\redis_subscriber_spec.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

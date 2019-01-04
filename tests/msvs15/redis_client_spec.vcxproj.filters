@@ -6,10 +6,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\sources\spec\redis_client_spec.cpp">
+    <ClCompile Include="..\sources\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\sources\main.cpp">
+    <ClCompile Include="..\sources\spec\redis_client_spec.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

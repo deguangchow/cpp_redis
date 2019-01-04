@@ -12,5 +12,6 @@
     <ClCompile Include="..\sources\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\sources\spec\redis_client_spec.cpp" />
   </ItemGroup>
 </Project>
