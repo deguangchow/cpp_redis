@@ -120,7 +120,7 @@
       <AdditionalOptions>%(AdditionalOptions) /machine:X86</AdditionalOptions>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <IgnoreSpecificDefaultLibraries>%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
-      <ImportLibrary>F:/github/cpp_redis/examples/msvs15/Debug/cpp_redis_client.lib</ImportLibrary>
+      <ImportLibrary>./Debug/cpp_redis_client.lib</ImportLibrary>
       <ProgramDataBaseFile>./Debug/cpp_redis_client.pdb</ProgramDataBaseFile>
       <SubSystem>Console</SubSystem>
     </Link>
