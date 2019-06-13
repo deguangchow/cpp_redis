@@ -50,8 +50,7 @@ integer_builder::operator<<(std::string& buffer) {
     if (!i && m_negative_multiplicator == 1 && buffer[i] == '-') {
       m_negative_multiplicator = -1;
       continue;
-    }
-    else if (!std::isdigit(buffer[i])) {
+    } else if (!std::isdigit(buffer[i])) {
       __CPP_REDIS_LOG(error, "cpp_redis::builders::integer_builder receives invalid digit character");
       throw redis_error("Invalid character for integer redis reply");
     }

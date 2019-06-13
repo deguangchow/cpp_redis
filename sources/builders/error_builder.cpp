@@ -27,18 +27,18 @@ namespace cpp_redis {
 namespace builders {
 
 builder_iface&
-error_builder::operator<<(std::string& buffer) {
-  m_string_builder << buffer;
+error_builder::operator<<(std::string& sBuffer) {
+  m_stringBuilder << sBuffer;
 
-  if (m_string_builder.reply_ready())
-    m_reply.set(m_string_builder.get_simple_string(), reply::string_type::error);
+  if (m_stringBuilder.reply_ready())
+    m_reply.set(m_stringBuilder.get_simple_string(), reply::string_type::error);
 
   return *this;
 }
 
 bool
 error_builder::reply_ready(void) const {
-  return m_string_builder.reply_ready();
+  return m_stringBuilder.reply_ready();
 }
 
 reply
@@ -48,9 +48,9 @@ error_builder::get_reply(void) const {
 
 const std::string&
 error_builder::get_error(void) const {
-  return m_string_builder.get_simple_string();
+  return m_stringBuilder.get_simple_string();
 }
 
-} //! builders
+} //namespace builders
 
-} //! cpp_redis
+} //namespace cpp_redis

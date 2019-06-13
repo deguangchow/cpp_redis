@@ -54,7 +54,8 @@ public:
   //!
   //! stop the tcp client
   //!
-  //! \param wait_for_removal when sets to true, disconnect blocks until the underlying TCP client has been effectively removed from the io_service and that all the underlying callbacks have completed.
+  //! \param wait_for_removal when sets to true, disconnect blocks until the underlying TCP client has been
+  //! effectively removed from the io_service and that all the underlying callbacks have completed.
   //!
   virtual void disconnect(bool wait_for_removal = false) = 0;
 
@@ -71,12 +72,12 @@ public:
     //!
     //! whether the operation succeeded or not
     //!
-    bool success;
+    bool                bSuccess;
 
     //!
     //! read bytes
     //!
-    std::vector<char> buffer;
+    std::vector<char>   vctBuffer;
   };
 
   //!
@@ -86,12 +87,12 @@ public:
     //!
     //! whether the operation succeeded or not
     //!
-    bool success;
+    bool                bSuccess;
 
     //!
     //! number of bytes written
     //!
-    std::size_t size;
+    std::size_t         nSizeWritten;
   };
 
 public:
@@ -115,12 +116,12 @@ public:
     //!
     //! number of bytes to read
     //!
-    std::size_t size;
+    std::size_t             nSizeToRead;
 
     //!
     //! callback to be called on operation completion
     //!
-    async_read_callback_t async_read_callback;
+    async_read_callback_t   callbackAsyncRead;
   };
 
   //!
@@ -130,12 +131,12 @@ public:
     //!
     //! bytes to write
     //!
-    std::vector<char> buffer;
+    std::vector<char>       vctBuffer;
 
     //!
     //! callback to be called on operation completion
     //!
-    async_write_callback_t async_write_callback;
+    async_write_callback_t  callbackAsyncWrite;
   };
 
 public:

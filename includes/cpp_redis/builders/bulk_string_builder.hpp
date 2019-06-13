@@ -84,32 +84,32 @@ private:
   //!
   //! builder used to get bulk string size
   //!
-  integer_builder m_int_builder;
+  integer_builder   m_intBuilder;
 
   //!
   //! bulk string size
   //!
-  int m_str_size;
+  int               m_nStringSize;
 
   //!
   //! bulk string
   //!
-  std::string m_str;
+  std::string       m_sValue;
 
   //!
   //! whether the bulk string is null
   //!
-  bool m_is_null;
+  bool              m_bIsNull;
 
   //!
   //! whether the reply is ready or not
   //!
-  bool m_reply_ready;
+  bool              m_bReplyReady;
 
   //!
   //! reply to be built
   //!
-  reply m_reply;
+  reply             m_reply;
 };
 
 } // namespace builders

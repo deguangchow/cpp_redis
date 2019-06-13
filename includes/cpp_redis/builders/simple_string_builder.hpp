@@ -75,17 +75,17 @@ private:
   //!
   //! parsed simple string
   //!
-  std::string m_str;
+  std::string       m_sValue;
 
   //!
   //! whether the reply is ready or not
   //!
-  bool m_reply_ready;
+  bool              m_bReplyReady;
 
   //!
   //! reply to be built
   //!
-  reply m_reply;
+  reply             m_reply;
 };
 
 } // namespace builders

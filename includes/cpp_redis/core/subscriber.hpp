@@ -131,7 +131,8 @@ public:
   //!
   //! disconnect from redis server
   //!
-  //! \param wait_for_removal when sets to true, disconnect blocks until the underlying TCP client has been effectively removed from the io_service and that all the underlying callbacks have completed.
+  //! \param wait_for_removal when sets to true, disconnect blocks until the underlying TCP client has been
+  //! effectively removed from the io_service and that all the underlying callbacks have completed.
   //!
   void disconnect(bool wait_for_removal = false);
 
@@ -154,7 +155,8 @@ public:
 
   //!
   //! ability to authenticate on the redis server if necessary
-  //! this method should not be called repeatedly as the storage of reply_callback is NOT threadsafe (only one reply callback is stored for the subscriber client)
+  //! this method should not be called repeatedly as the storage of reply_callback is NOT threadsafe
+  //! (only one reply callback is stored for the subscriber client)
   //! calling repeatedly auth() is undefined concerning the execution of the associated callbacks
   //!
   //! \param password password to be used for authentication
@@ -186,7 +188,8 @@ public:
   //! \param acknowledgement_callback callback to be called on subscription completion (nullable)
   //! \return current instance
   //!
-  subscriber& subscribe(const std::string& channel, const subscribe_callback_t& callback, const acknowledgement_callback_t& acknowledgement_callback = nullptr);
+  subscriber& subscribe(const std::string& channel, const subscribe_callback_t& callback,
+      const acknowledgement_callback_t& acknowledgement_callback = nullptr);
 
   //!
   //! PSubscribes to the given channel and:
@@ -199,7 +202,8 @@ public:
   //! \param acknowledgement_callback callback to be called on subscription completion (nullable)
   //! \return current instance
   //!
-  subscriber& psubscribe(const std::string& pattern, const subscribe_callback_t& callback, const acknowledgement_callback_t& acknowledgement_callback = nullptr);
+  subscriber& psubscribe(const std::string& pattern, const subscribe_callback_t& callback,
+      const acknowledgement_callback_t& acknowledgement_callback = nullptr);
 
   //!
   //! unsubscribe from the given channel
@@ -314,7 +318,8 @@ private:
   //! \param channels_mtx channels or patterns mtx to be locked for race condition
   //! \param nb_chans redis server ack reply
   //!
-  void call_acknowledgement_callback(const std::string& channel, const std::map<std::string, callback_holder>& channels, std::mutex& channels_mtx, int64_t nb_chans);
+  void call_acknowledgement_callback(const std::string& channel,
+      const std::map<std::string, callback_holder>& channels, std::mutex& channels_mtx, int64_t nb_chans);
 
 private:
   //!
@@ -344,7 +349,8 @@ private:
   void sleep_before_next_reconnect_attempt(void);
 
   //!
-  //! clear all subscriptions (dirty way, no unsub/punsub commands send: mostly used for cleaning in disconnection condition)
+  //! clear all subscriptions (dirty way, no unsub/punsub commands send:
+  //! mostly used for cleaning in disconnection condition)
   //!
   void clear_subscriptions(void);
 
@@ -357,7 +363,8 @@ private:
   //! \param callback callback to be called whenever a message is received for this channel
   //! \param acknowledgement_callback callback to be called on subscription completion (nullable)
   //!
-  void unprotected_subscribe(const std::string& channel, const subscribe_callback_t& callback, const acknowledgement_callback_t& acknowledgement_callback);
+  void unprotected_subscribe(const std::string& channel, const subscribe_callback_t& callback,
+      const acknowledgement_callback_t& acknowledgement_callback);
 
   //!
   //! unprotected psub
@@ -367,7 +374,8 @@ private:
   //! \param callback callback to be called whenever a message is received for this pattern
   //! \param acknowledgement_callback callback to be called on subscription completion (nullable)
   //!
-  void unprotected_psubscribe(const std::string& pattern, const subscribe_callback_t& callback, const acknowledgement_callback_t& acknowledgement_callback);
+  void unprotected_psubscribe(const std::string& pattern, const subscribe_callback_t& callback,
+      const acknowledgement_callback_t& acknowledgement_callback);
 
 private:
   //!

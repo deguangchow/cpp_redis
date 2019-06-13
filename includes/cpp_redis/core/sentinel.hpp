@@ -35,7 +35,8 @@ namespace cpp_redis {
 //!
 //! cpp_redis::sentinel is the class providing sentinel configuration.
 //! It is meant to be used for sending sentinel-related commands to the remote server and receiving its replies.
-//! It is also meant to be used with cpp_redis::client and cpp_redis::subscriber for high availability (automatic failover if reconnection is enabled).
+//! It is also meant to be used with cpp_redis::client and cpp_redis::subscriber for high availability
+//! (automatic failover if reconnection is enabled).
 //!
 class sentinel {
 public:
@@ -87,7 +88,8 @@ public:
 
   //!
   //! same as commit(), but synchronous
-  //! will block until all pending commands have been sent and that a reply has been received for each of them and all underlying callbacks completed
+  //! will block until all pending commands have been sent and that a reply has been received for each of them and
+  //! all underlying callbacks completed
   //!
   //! \return current instance
   //!
@@ -101,17 +103,16 @@ public:
   //!
   template <class Rep, class Period>
   sentinel&
-  sync_commit(const std::chrono::duration<Rep, Period>& timeout) {
+  sync_commit(const std::chrono::duration<Rep, Period>& durTimeout) {
     try_commit();
 
-    std::unique_lock<std::mutex> lock_callback(m_callbacks_mutex);
+    std::unique_lock<std::mutex> ulockCallback(m_mtxCallbacks);
     __CPP_REDIS_LOG(debug, "cpp_redis::sentinel waiting for callbacks to complete");
-    if (!m_sync_condvar.wait_for(lock_callback, timeout, [=] {
-          return m_callbacks_running == 0 && m_callbacks.empty();
+    if (!m_cvSync.wait_for(ulockCallback, durTimeout, [=] {
+          return m_nRunningCallbacks_a == 0 && m_queCallbacks.empty();
         })) {
       __CPP_REDIS_LOG(debug, "cpp_redis::sentinel finished waiting for callback");
-    }
-    else {
+    } else {
       __CPP_REDIS_LOG(debug, "cpp_redis::sentinel timed out waiting for callback");
     }
     return *this;
@@ -137,9 +138,10 @@ public:
   //!
   //! disconnect from redis server
   //!
-  //! \param wait_for_removal when sets to true, disconnect blocks until the underlying TCP client has been effectively removed from the io_service and that all the underlying callbacks have completed.
+  //! \param wait_for_removal when sets to true, disconnect blocks until the underlying TCP client has been
+  //! effectively removed from the io_service and that all the underlying callbacks have completed.
   //!
-  void disconnect(bool wait_for_removal = false);
+  void disconnect(bool bWaitForRemoval = false);
 
   //!
   //! \return whether we are connected to the redis server or not
@@ -169,10 +171,10 @@ public:
   //! \param disconnect_handler handler to be called whenever disconnection occurs
   //!
   void connect(
-    const std::string& host,
-    std::size_t port,
-    const sentinel_disconnect_handler_t& disconnect_handler = nullptr,
-    std::uint32_t timeout_msecs                             = 0);
+    const std::string& sHost,
+    std::size_t nPort,
+    const sentinel_disconnect_handler_t& handlerDisconnect = nullptr,
+    std::uint32_t uTimeoutMsecs = 0);
 
   //!
   //! Used to find the current redis master by asking one or more sentinels. Use high availablity.
@@ -183,15 +185,16 @@ public:
   //! \param name sentinel name
   //! \param host sentinel host
   //! \param port sentinel port
-  //! \param autoconnect  autoconnect we loop through and connect/disconnect as necessary to sentinels that were added using add_sentinel().
+  //! \param autoconnect  autoconnect we loop through and connect/disconnect as necessary to
+  //! sentinels that were added using add_sentinel().
   //!                     Otherwise we rely on the call to connect to a sentinel before calling this method.
   //! \return true if a master was found and fills in host and port output parameters, false otherwise
   //!
   bool get_master_addr_by_name(
-    const std::string& name,
-    std::string& host,
-    std::size_t& port,
-    bool autoconnect = true);
+    const std::string& sSentinelName,
+    std::string& sHost,
+    std::size_t& nPort,
+    bool bAutoConnect = true);
 
 public:
   sentinel& ckquorum(const std::string& name, const reply_callback_t& reply_callback = nullptr);
@@ -199,12 +202,14 @@ public:
   sentinel& flushconfig(const reply_callback_t& reply_callback = nullptr);
   sentinel& master(const std::string& name, const reply_callback_t& reply_callback = nullptr);
   sentinel& masters(const reply_callback_t& reply_callback = nullptr);
-  sentinel& monitor(const std::string& name, const std::string& ip, std::size_t port, std::size_t quorum, const reply_callback_t& reply_callback = nullptr);
+  sentinel& monitor(const std::string& name, const std::string& ip, std::size_t port, std::size_t quorum,
+      const reply_callback_t& reply_callback = nullptr);
   sentinel& ping(const reply_callback_t& reply_callback = nullptr);
   sentinel& remove(const std::string& name, const reply_callback_t& reply_callback = nullptr);
   sentinel& reset(const std::string& pattern, const reply_callback_t& reply_callback = nullptr);
   sentinel& sentinels(const std::string& name, const reply_callback_t& reply_callback = nullptr);
-  sentinel& set(const std::string& name, const std::string& option, const std::string& value, const reply_callback_t& reply_callback = nullptr);
+  sentinel& set(const std::string& name, const std::string& option, const std::string& value,
+      const reply_callback_t& reply_callback = nullptr);
   sentinel& slaves(const std::string& name, const reply_callback_t& reply_callback = nullptr);
 
 public:
@@ -216,7 +221,7 @@ public:
   public:
     //! ctor
     sentinel_def(const std::string& host, std::size_t port, std::uint32_t timeout_msecs)
-    : m_host(host), m_port(port), m_timeout_msecs(timeout_msecs) {}
+    : m_sHost(host), m_nPort(port), m_uTimeoutMsecs(timeout_msecs) {}
 
     //! dtor
     ~sentinel_def(void) = default;
@@ -226,42 +231,42 @@ public:
     //! \return sentinel host
     //!
     const std::string&
-    get_host(void) const { return m_host; }
+    get_host(void) const { return m_sHost; }
 
     //!
     //! \return sentinel port
     //!
     size_t
-    get_port(void) const { return m_port; }
+    get_port(void) const { return m_nPort; }
 
     //!
     //! \return timeout for sentinel
     //!
     std::uint32_t
-    get_timeout_msecs(void) const { return m_timeout_msecs; }
+    get_timeout_msecs(void) const { return m_uTimeoutMsecs; }
 
     //!
     //! set connect timeout for sentinel in msecs
     //! \param timeout_msecs new value
     //!
     void
-    set_timeout_msecs(std::uint32_t timeout_msecs) { m_timeout_msecs = timeout_msecs; }
+    set_timeout_msecs(std::uint32_t timeout_msecs) { m_uTimeoutMsecs = timeout_msecs; }
 
   private:
     //!
     //! sentinel host
     //!
-    std::string m_host;
+    std::string     m_sHost;
 
     //!
     //! sentinel port
     //!
-    std::size_t m_port;
+    std::size_t     m_nPort;
 
     //!
     //! connect timeout config
     //!
-    std::uint32_t m_timeout_msecs;
+    std::uint32_t   m_uTimeoutMsecs;
   };
 
 public:
@@ -311,37 +316,37 @@ private:
   //!
   //! A pool of 1 or more sentinels we ask to determine which redis server is the master.
   //!
-  std::vector<sentinel_def> m_sentinels;
+  std::vector<sentinel_def>         m_vctSentinels;
 
   //!
   //! tcp client for redis sentinel connection
   //!
-  network::redis_connection m_client;
+  network::redis_connection         m_redisConnection;
 
   //!
   //! queue of callback to process
   //!
-  std::queue<reply_callback_t> m_callbacks;
+  std::queue<reply_callback_t>      m_queCallbacks;
 
   //!
   //! user defined disconnection handler to be called on disconnection
   //!
-  sentinel_disconnect_handler_t m_disconnect_handler;
+  sentinel_disconnect_handler_t     m_handlerDisconnect;
 
   //!
   //! callbacks thread safety
   //!
-  std::mutex m_callbacks_mutex;
+  std::mutex                        m_mtxCallbacks;
 
   //!
   //! condvar for callbacks updates
   //!
-  std::condition_variable m_sync_condvar;
+  std::condition_variable           m_cvSync;
 
   //!
   //! number of callbacks currently being running
   //!
-  std::atomic<unsigned int> m_callbacks_running;
+  std::atomic<unsigned int>         m_nRunningCallbacks_a;
 };
 
 }; // namespace cpp_redis

@@ -29,33 +29,33 @@ namespace cpp_redis {
 namespace builders {
 
 bulk_string_builder::bulk_string_builder(void)
-: m_str_size(0)
-, m_str("")
-, m_is_null(false)
-, m_reply_ready(false) {}
+: m_nStringSize(0)
+, m_sValue("")
+, m_bIsNull(false)
+, m_bReplyReady(false) {}
 
 void
 bulk_string_builder::build_reply(void) {
-  if (m_is_null)
+  if (m_bIsNull)
     m_reply.set();
   else
-    m_reply.set(m_str, reply::string_type::bulk_string);
+    m_reply.set(m_sValue, reply::string_type::bulk_string);
 
-  m_reply_ready = true;
+  m_bReplyReady = true;
 }
 
 bool
-bulk_string_builder::fetch_size(std::string& buffer) {
-  if (m_int_builder.reply_ready())
+bulk_string_builder::fetch_size(std::string& sBuffer) {
+  if (m_intBuilder.reply_ready())
     return true;
 
-  m_int_builder << buffer;
-  if (!m_int_builder.reply_ready())
+  m_intBuilder << sBuffer;
+  if (!m_intBuilder.reply_ready())
     return false;
 
-  m_str_size = (int) m_int_builder.get_integer();
-  if (m_str_size == -1) {
-    m_is_null = true;
+  m_nStringSize = static_cast<int>(m_intBuilder.get_integer());
+  if (m_nStringSize == -1) {
+    m_bIsNull = true;
     build_reply();
   }
 
@@ -63,37 +63,35 @@ bulk_string_builder::fetch_size(std::string& buffer) {
 }
 
 void
-bulk_string_builder::fetch_str(std::string& buffer) {
-  if (buffer.size() < static_cast<std::size_t>(m_str_size) + 2) // also wait for end sequence
+bulk_string_builder::fetch_str(std::string& sBuffer) {
+  if (sBuffer.size() < static_cast<std::size_t>(m_nStringSize) + 2) // also wait for end sequence
     return;
 
-  if (buffer[m_str_size] != '\r' || buffer[m_str_size + 1] != '\n') {
+  if (sBuffer[m_nStringSize] != '\r' || sBuffer[m_nStringSize + 1] != '\n') {
     __CPP_REDIS_LOG(error, "cpp_redis::builders::bulk_string_builder receives invalid ending sequence");
     throw redis_error("Wrong ending sequence");
   }
 
-  m_str = buffer.substr(0, m_str_size);
-  buffer.erase(0, m_str_size + 2);
+  m_sValue = sBuffer.substr(0, m_nStringSize);
+  sBuffer.erase(0, m_nStringSize + 2);
   build_reply();
 }
 
 builder_iface&
-bulk_string_builder::operator<<(std::string& buffer) {
-  if (m_reply_ready)
-    return *this;
+bulk_string_builder::operator<<(std::string& sBuffer) {
 
   //! if we don't have the size, try to get it with the current buffer
-  if (!fetch_size(buffer) || m_reply_ready)
+  if (m_bReplyReady || !fetch_size(sBuffer))
     return *this;
 
-  fetch_str(buffer);
+  fetch_str(sBuffer);
 
   return *this;
 }
 
 bool
 bulk_string_builder::reply_ready(void) const {
-  return m_reply_ready;
+  return m_bReplyReady;
 }
 
 reply
@@ -103,12 +101,12 @@ bulk_string_builder::get_reply(void) const {
 
 const std::string&
 bulk_string_builder::get_bulk_string(void) const {
-  return m_str;
+  return m_sValue;
 }
 
 bool
 bulk_string_builder::is_null(void) const {
-  return m_is_null;
+  return m_bIsNull;
 }
 
 } // namespace builders

@@ -28,62 +28,62 @@ namespace cpp_redis {
 namespace network {
 
 void
-tcp_client::connect(const std::string& addr, std::uint32_t port, std::uint32_t timeout_msecs) {
-  m_client.connect(addr, port, timeout_msecs);
+tcp_client::connect(const std::string& sAddr, std::uint32_t uPort, std::uint32_t uTimeoutMsecs) {
+  m_tcpClient.connect(sAddr, uPort, uTimeoutMsecs);
 }
 
 
 void
-tcp_client::disconnect(bool wait_for_removal) {
-  m_client.disconnect(wait_for_removal);
+tcp_client::disconnect(bool bWaitForRemoval) {
+  m_tcpClient.disconnect(bWaitForRemoval);
 }
 
 bool
 tcp_client::is_connected(void) const {
-  return m_client.is_connected();
+  return m_tcpClient.is_connected();
 }
 
 void
-tcp_client::set_nb_workers(std::size_t nb_threads) {
-  m_client.get_io_service()->set_nb_workers(nb_threads);
+tcp_client::set_nb_workers(std::size_t nNbThreads) {
+  m_tcpClient.get_io_service()->set_nb_workers(nNbThreads);
 }
 
 void
-tcp_client::async_read(read_request& request) {
-  auto callback = std::move(request.async_read_callback);
+tcp_client::async_read(read_request& requestRead) {
+  auto callbackAsyncRead = std::move(requestRead.callbackAsyncRead);
 
-  m_client.async_read({request.size, [=](tacopie::tcp_client::read_result& result) {
-                         if (!callback) {
+  m_tcpClient.async_read({requestRead.nSizeToRead, [=](tacopie::tcp_client::read_result& resultRead) {
+                         if (!callbackAsyncRead) {
                            return;
                          }
 
-                         read_result converted_result = {result.success, std::move(result.buffer)};
-                         callback(converted_result);
+                         read_result resultReadConverted = {resultRead.success, std::move(resultRead.buffer)};
+                         callbackAsyncRead(resultReadConverted);
                        }});
 }
 
 void
-tcp_client::async_write(write_request& request) {
-  auto callback = std::move(request.async_write_callback);
+tcp_client::async_write(write_request& requestWrite) {
+  auto callbackAsyncWrite = std::move(requestWrite.callbackAsyncWrite);
 
-  m_client.async_write({std::move(request.buffer), [=](tacopie::tcp_client::write_result& result) {
-                          if (!callback) {
+  m_tcpClient.async_write({std::move(requestWrite.vctBuffer), [=](tacopie::tcp_client::write_result& resultWrite) {
+                          if (!callbackAsyncWrite) {
                             return;
                           }
 
-                          write_result converted_result = {result.success, result.size};
-                          callback(converted_result);
+                          write_result resultWriteConverted = {resultWrite.success, resultWrite.size};
+                          callbackAsyncWrite(resultWriteConverted);
                         }});
 }
 
 void
-tcp_client::set_on_disconnection_handler(const disconnection_handler_t& disconnection_handler) {
-  m_client.set_on_disconnection_handler(disconnection_handler);
+tcp_client::set_on_disconnection_handler(const disconnection_handler_t& handlerDisconnection) {
+  m_tcpClient.set_on_disconnection_handler(handlerDisconnection);
 }
 
 void
-set_default_nb_workers(std::size_t nb_threads) {
-  tacopie::get_default_io_service()->set_nb_workers(__CPP_REDIS_LENGTH(nb_threads));
+set_default_nb_workers(std::size_t nNbThreads) {
+  tacopie::get_default_io_service()->set_nb_workers(__CPP_REDIS_LENGTH(nNbThreads));
 }
 
 } // namespace network

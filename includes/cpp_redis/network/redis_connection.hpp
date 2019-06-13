@@ -54,7 +54,7 @@ public:
   //!
   //! \param tcp_client tcp client to be used for network communications
   //!
-  explicit redis_connection(const std::shared_ptr<tcp_client_iface>& tcp_client);
+  explicit redis_connection(const std::shared_ptr<tcp_client_iface>& ptrTcpClient);
 
   //! dtor
   ~redis_connection(void);
@@ -85,16 +85,17 @@ public:
   //! \param timeout_msecs max time to connect (in ms)
   //!
   void connect(
-    const std::string& host                              = "127.0.0.1",
-    std::size_t port                                     = 6379,
-    const disconnection_handler_t& disconnection_handler = nullptr,
-    const reply_callback_t& reply_callback               = nullptr,
-    std::uint32_t timeout_msecs                          = 0);
+    const std::string& sHost                                    = "127.0.0.1",
+    std::size_t uPort                                           = 6379,
+    const disconnection_handler_t& handlerClientDisconnection   = nullptr,
+    const reply_callback_t& callbackClientReply                 = nullptr,
+    std::uint32_t uTimeoutMsecs                                 = 0);
 
   //!
   //! disconnect from redis server
   //!
-  //! \param wait_for_removal when sets to true, disconnect blocks until the underlying TCP client has been effectively removed from the io_service and that all the underlying callbacks have completed.
+  //! \param wait_for_removal when sets to true, disconnect blocks until the underlying TCP client has been
+  //! effectively removed from the io_service and that all the underlying callbacks have completed.
   //!
   void disconnect(bool wait_for_removal = false);
 
@@ -111,7 +112,7 @@ public:
   //! \param redis_cmd command to be sent
   //! \return current instance
   //!
-  redis_connection& send(const std::vector<std::string>& redis_cmd);
+  redis_connection& send(const std::vector<std::string>& vctRedisCmd);
 
   //!
   //! commit pipelined transaction
@@ -128,7 +129,7 @@ private:
   //!
   //! \param result read result
   //!
-  void tcp_client_receive_handler(const tcp_client_iface::read_result& result);
+  void tcp_client_receive_handler(const tcp_client_iface::read_result& resultRead);
 
   //!
   //! tcp_client disconnection handler
@@ -140,7 +141,7 @@ private:
   //! transform a user command to a redis command using the redis protocol format
   //! for example, transform {"GET", "HELLO"} to something like "*2\r\n+GET\r\n+HELLO\r\n"
   //!
-  std::string build_command(const std::vector<std::string>& redis_cmd);
+  std::string build_command(const std::vector<std::string>& vctRedisCmd);
 
 private:
   //!
@@ -152,32 +153,33 @@ private:
   //!
   //! tcp client for redis connection
   //!
-  std::shared_ptr<cpp_redis::network::tcp_client_iface> m_client;
+  std::shared_ptr<cpp_redis::network::tcp_client_iface>     m_ptrTcpClient;
 
   //!
   //! reply callback called whenever a reply has been read
   //!
-  reply_callback_t m_reply_callback;
+  reply_callback_t                                          m_callbackReply;
 
   //!
   //! disconnection handler whenever a disconnection occured
   //!
-  disconnection_handler_t m_disconnection_handler;
+  disconnection_handler_t                                   m_handlerDisconnection;
 
   //!
   //! reply builder used to build replies
   //!
-  builders::reply_builder m_builder;
+  builders::reply_builder                                   m_builderReply;
 
   //!
-  //! internal buffer used for pipelining (commands are buffered here and flushed to the tcp client when commit is called)
+  //! internal buffer used for pipelining (commands are buffered here and flushed to the tcp client
+  //! when commit is called)
   //!
-  std::string m_buffer;
+  std::string                                               m_sBuffer;
 
   //!
   //! protect internal buffer against race conditions
   //!
-  std::mutex m_buffer_mutex;
+  std::mutex                                                m_mtxBuffer;
 };
 
 } // namespace network

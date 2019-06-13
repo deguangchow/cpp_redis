@@ -74,12 +74,12 @@ private:
   //!
   //! builder used to parse the error
   //!
-  simple_string_builder m_string_builder;
+  simple_string_builder         m_stringBuilder;
 
   //!
   //! reply to be built
   //!
-  reply m_reply;
+  reply                         m_reply;
 };
 
 } // namespace builders

@@ -89,7 +89,7 @@ public:
   //!
   //! \param tcp_client tcp client to be used for network communications
   //!
-  explicit client(const std::shared_ptr<network::tcp_client_iface>& tcp_client);
+  explicit client(const std::shared_ptr<network::tcp_client_iface>& ptrTcpClient);
 
   //! dtor
   ~client(void);
@@ -116,12 +116,12 @@ public:
   //! \param reconnect_interval_msecs time between two attemps of reconnection
   //!
   void connect(
-    const std::string& host                    = "127.0.0.1",
-    std::size_t port                           = 6379,
-    const connect_callback_t& connect_callback = nullptr,
-    std::uint32_t timeout_msecs                = 0,
-    std::int32_t max_reconnects                = 0,
-    std::uint32_t reconnect_interval_msecs     = 0);
+    const std::string& sHost                    = "127.0.0.1",
+    std::size_t uPort                           = 6379,
+    const connect_callback_t& callbackConnect   = nullptr,
+    std::uint32_t uTimeoutMsecs                 = 0,
+    std::int32_t nMaxReconnects                 = 0,
+    std::uint32_t uReconnectIntervalMsecs       = 0);
 
   //!
   //! Connect to redis server
@@ -133,11 +133,11 @@ public:
   //! \param reconnect_interval_msecs time between two attemps of reconnection
   //!
   void connect(
-    const std::string& name,
-    const connect_callback_t& connect_callback = nullptr,
-    std::uint32_t timeout_msecs                = 0,
-    std::int32_t max_reconnects                = 0,
-    std::uint32_t reconnect_interval_msecs     = 0);
+    const std::string& sSentinelName,
+    const connect_callback_t& callbackConnect   = nullptr,
+    std::uint32_t uTimeoutMsecs                 = 0,
+    std::int32_t nMaxReconnects                 = 0,
+    std::uint32_t uReconnectIntervalMsecs       = 0);
 
   //!
   //! \return whether we are connected to the redis server
@@ -147,9 +147,10 @@ public:
   //!
   //! disconnect from redis server
   //!
-  //! \param wait_for_removal when sets to true, disconnect blocks until the underlying TCP client has been effectively removed from the io_service and that all the underlying callbacks have completed.
+  //! \param wait_for_removal when sets to true, disconnect blocks until the underlying TCP client has been
+  //! effectively removed from the io_service and that all the underlying callbacks have completed.
   //!
-  void disconnect(bool wait_for_removal = false);
+  void disconnect(bool bWaitForRemoval = false);
 
   //!
   //! \return whether an attemp to reconnect is in progress
@@ -177,7 +178,7 @@ public:
   //! \param callback callback to be called on received reply
   //! \return current instance
   //!
-  client& send(const std::vector<std::string>& redis_cmd, const reply_callback_t& callback);
+  client& send(const std::vector<std::string>& vctRedisCmd, const reply_callback_t& callback);
 
   //!
   //! same as the other send method
@@ -186,21 +187,27 @@ public:
   //! \param redis_cmd command to be sent
   //! \return std::future to handler redis reply
   //!
-  std::future<reply> send(const std::vector<std::string>& redis_cmd);
+  std::future<reply> send(const std::vector<std::string>& vctRedisCmd);
 
   //!
   //! Sends all the commands that have been stored by calling send() since the last commit() call to the redis server.
-  //! That is, pipelining is supported in a very simple and efficient way: client.send(...).send(...).send(...).commit() will send the 3 commands at once (instead of sending 3 network requests, one for each command, as it would have been done without pipelining).
-  //! Pipelined commands are always removed from the buffer, even in the case of an error (for example, calling commit while the client is not connected, something that throws an exception).
-  //! commit() works asynchronously: it returns immediately after sending the queued requests and replies are processed asynchronously.
+  //! That is, pipelining is supported in a very simple and efficient way:
+  //! client.send(...).send(...).send(...).commit() will send the 3 commands at once
+  //! (instead of sending 3 network requests, one for each command, as it would have been done without pipelining).
+  //! Pipelined commands are always removed from the buffer, even in the case of an error
+  //! (for example, calling commit while the client is not connected, something that throws an exception).
+  //! commit() works asynchronously: it returns immediately after sending the queued requests and replies
+  //! are processed asynchronously.
   //!
-  //! Please note that, while commit() can safely be called from inside a reply callback, calling sync_commit() from inside a reply callback is not permitted and will lead to undefined behavior, mostly deadlock.
+  //! Please note that, while commit() can safely be called from inside a reply callback, calling sync_commit()
+  //! from inside a reply callback is not permitted and will lead to undefined behavior, mostly deadlock.
   //!
   client& commit(void);
 
   //!
   //! same as commit(), but synchronous
-  //! will block until all pending commands have been sent and that a reply has been received for each of them and all underlying callbacks completed
+  //! will block until all pending commands have been sent and that a reply has been received for each of them and
+  //! all underlying callbacks completed
   //!
   //! \return current instance
   //!
@@ -214,19 +221,20 @@ public:
   //!
   template <class Rep, class Period>
   client&
-  sync_commit(const std::chrono::duration<Rep, Period>& timeout) {
+  sync_commit(const std::chrono::duration<Rep, Period>& durTimeout) {
     //! no need to call commit in case of reconnection
     //! the reconnection flow will do it for us
     if (!is_reconnecting()) {
       try_commit();
     }
 
-    std::unique_lock<std::mutex> lock_callback(m_callbacks_mutex);
+    std::unique_lock<std::mutex> ulockCallback(m_mtxCallbacks);
     __CPP_REDIS_LOG(debug, "cpp_redis::client waiting for callbacks to complete");
-    if (!m_sync_condvar.wait_for(lock_callback, timeout, [=] { return m_callbacks_running == 0 && m_commands.empty(); })) {
+    if (!m_cvSync.wait_for(ulockCallback, durTimeout, [=] {
+        return m_uRunningCallbacks_a == 0 && m_queCommands.empty();
+    })) {
       __CPP_REDIS_LOG(debug, "cpp_redis::client finished waiting for callback");
-    }
-    else {
+    } else {
       __CPP_REDIS_LOG(debug, "cpp_redis::client timed out waiting for callback");
     }
 
@@ -443,7 +451,8 @@ public:
     //! \param overflow overflow specification (leave to server_default if you do not want to specify it)
     //! \return corresponding get bitfield_operation
     //!
-    static bitfield_operation get(const std::string& type, int offset, overflow_type overflow = overflow_type::server_default);
+    static bitfield_operation get(const std::string& type, int offset,
+        overflow_type overflow = overflow_type::server_default);
 
     //!
     //! build a bitfield_operation for a bitfield set operation
@@ -454,7 +463,8 @@ public:
     //! \param overflow overflow specification (leave to server_default if you do not want to specify it)
     //! \return corresponding set bitfield_operation
     //!
-    static bitfield_operation set(const std::string& type, int offset, int value, overflow_type overflow = overflow_type::server_default);
+    static bitfield_operation set(const std::string& type, int offset, int value,
+        overflow_type overflow = overflow_type::server_default);
 
     //!
     //! build a bitfield_operation for a bitfield incrby operation
@@ -465,7 +475,8 @@ public:
     //! \param overflow overflow specification (leave to server_default if you do not want to specify it)
     //! \return corresponding incrby bitfield_operation
     //!
-    static bitfield_operation incrby(const std::string& type, int offset, int increment, overflow_type overflow = overflow_type::server_default);
+    static bitfield_operation incrby(const std::string& type, int offset, int increment,
+        overflow_type overflow = overflow_type::server_default);
   };
 
 public:
@@ -488,11 +499,14 @@ public:
   client& bitcount(const std::string& key, int start, int end, const reply_callback_t& reply_callback);
   std::future<reply> bitcount(const std::string& key, int start, int end);
 
-  client& bitfield(const std::string& key, const std::vector<bitfield_operation>& operations, const reply_callback_t& reply_callback);
+  client& bitfield(const std::string& key, const std::vector<bitfield_operation>& operations,
+      const reply_callback_t& reply_callback);
   std::future<reply> bitfield(const std::string& key, const std::vector<bitfield_operation>& operations);
 
-  client& bitop(const std::string& operation, const std::string& destkey, const std::vector<std::string>& keys, const reply_callback_t& reply_callback);
-  std::future<reply> bitop(const std::string& operation, const std::string& destkey, const std::vector<std::string>& keys);
+  client& bitop(const std::string& operation, const std::string& destkey, const std::vector<std::string>& keys,
+      const reply_callback_t& reply_callback);
+  std::future<reply> bitop(const std::string& operation, const std::string& destkey,
+      const std::vector<std::string>& keys);
 
   client& bitpos(const std::string& key, int bit, const reply_callback_t& reply_callback);
   std::future<reply> bitpos(const std::string& key, int bit);
@@ -509,7 +523,8 @@ public:
   client& brpop(const std::vector<std::string>& keys, int timeout, const reply_callback_t& reply_callback);
   std::future<reply> brpop(const std::vector<std::string>& keys, int timeout);
 
-  client& brpoplpush(const std::string& src, const std::string& dst, int timeout, const reply_callback_t& reply_callback);
+  client& brpoplpush(const std::string& src, const std::string& dst, int timeout,
+      const reply_callback_t& reply_callback);
   std::future<reply> brpoplpush(const std::string& src, const std::string& dst, int timeout);
 
   template <typename T, typename... Ts>
@@ -589,7 +604,8 @@ public:
   client& cluster_setslot(const std::string& slot, const std::string& mode, const reply_callback_t& reply_callback);
   std::future<reply> cluster_setslot(const std::string& slot, const std::string& mode);
 
-  client& cluster_setslot(const std::string& slot, const std::string& mode, const std::string& node_id, const reply_callback_t& reply_callback);
+  client& cluster_setslot(const std::string& slot, const std::string& mode, const std::string& node_id,
+      const reply_callback_t& reply_callback);
   std::future<reply> cluster_setslot(const std::string& slot, const std::string& mode, const std::string& node_id);
 
   client& cluster_slaves(const std::string& node_id, const reply_callback_t& reply_callback);
@@ -649,11 +665,15 @@ public:
   client& echo(const std::string& msg, const reply_callback_t& reply_callback);
   std::future<reply> echo(const std::string& msg);
 
-  client& eval(const std::string& script, int numkeys, const std::vector<std::string>& keys, const std::vector<std::string>& args, const reply_callback_t& reply_callback);
-  std::future<reply> eval(const std::string& script, int numkeys, const std::vector<std::string>& keys, const std::vector<std::string>& args);
+  client& eval(const std::string& script, int numkeys, const std::vector<std::string>& keys,
+      const std::vector<std::string>& args, const reply_callback_t& reply_callback);
+  std::future<reply> eval(const std::string& script, int numkeys, const std::vector<std::string>& keys,
+      const std::vector<std::string>& args);
 
-  client& evalsha(const std::string& sha1, int numkeys, const std::vector<std::string>& keys, const std::vector<std::string>& args, const reply_callback_t& reply_callback);
-  std::future<reply> evalsha(const std::string& sha1, int numkeys, const std::vector<std::string>& keys, const std::vector<std::string>& args);
+  client& evalsha(const std::string& sha1, int numkeys, const std::vector<std::string>& keys,
+      const std::vector<std::string>& args, const reply_callback_t& reply_callback);
+  std::future<reply> evalsha(const std::string& sha1, int numkeys, const std::vector<std::string>& keys,
+      const std::vector<std::string>& args);
 
   client& exec(const reply_callback_t& reply_callback);
   std::future<reply> exec();
@@ -673,34 +693,68 @@ public:
   client& flushdb(const reply_callback_t& reply_callback);
   std::future<reply> flushdb();
 
-  client& geoadd(const std::string& key, const std::vector<std::tuple<std::string, std::string, std::string>>& long_lat_memb, const reply_callback_t& reply_callback);
-  std::future<reply> geoadd(const std::string& key, const std::vector<std::tuple<std::string, std::string, std::string>>& long_lat_memb);
+  client& geoadd(const std::string& key,
+      const std::vector<std::tuple<std::string, std::string, std::string>>& long_lat_memb,
+      const reply_callback_t& reply_callback);
+  std::future<reply> geoadd(const std::string& key,
+      const std::vector<std::tuple<std::string, std::string, std::string>>& long_lat_memb);
 
-  client& geohash(const std::string& key, const std::vector<std::string>& members, const reply_callback_t& reply_callback);
+  client& geohash(const std::string& key, const std::vector<std::string>& members,
+      const reply_callback_t& reply_callback);
   std::future<reply> geohash(const std::string& key, const std::vector<std::string>& members);
 
-  client& geopos(const std::string& key, const std::vector<std::string>& members, const reply_callback_t& reply_callback);
+  client& geopos(const std::string& key, const std::vector<std::string>& members,
+      const reply_callback_t& reply_callback);
   std::future<reply> geopos(const std::string& key, const std::vector<std::string>& members);
 
-  client& geodist(const std::string& key, const std::string& member_1, const std::string& member_2, const reply_callback_t& reply_callback);
-  client& geodist(const std::string& key, const std::string& member_1, const std::string& member_2, const std::string& unit, const reply_callback_t& reply_callback);
-  std::future<reply> geodist(const std::string& key, const std::string& member_1, const std::string& member_2, const std::string& unit = "m");
+  client& geodist(const std::string& key, const std::string& member_1, const std::string& member_2,
+      const reply_callback_t& reply_callback);
+  client& geodist(const std::string& key, const std::string& member_1, const std::string& member_2,
+      const std::string& unit, const reply_callback_t& reply_callback);
+  std::future<reply> geodist(const std::string& key, const std::string& member_1, const std::string& member_2,
+      const std::string& unit = "m");
 
-  client& georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit, bool with_coord, bool with_dist, bool with_hash, bool asc_order, const reply_callback_t& reply_callback);
-  client& georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit, bool with_coord, bool with_dist, bool with_hash, bool asc_order, std::size_t count, const reply_callback_t& reply_callback);
-  client& georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit, bool with_coord, bool with_dist, bool with_hash, bool asc_order, const std::string& store_key, const reply_callback_t& reply_callback);
-  client& georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit, bool with_coord, bool with_dist, bool with_hash, bool asc_order, const std::string& store_key, const std::string& storedist_key, const reply_callback_t& reply_callback);
-  client& georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit, bool with_coord, bool with_dist, bool with_hash, bool asc_order, std::size_t count, const std::string& store_key, const reply_callback_t& reply_callback);
-  client& georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit, bool with_coord, bool with_dist, bool with_hash, bool asc_order, std::size_t count, const std::string& store_key, const std::string& storedist_key, const reply_callback_t& reply_callback);
-  std::future<reply> georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit, bool with_coord = false, bool with_dist = false, bool with_hash = false, bool asc_order = false, std::size_t count = 0, const std::string& store_key = "", const std::string& storedist_key = "");
+  client& georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit,
+      bool with_coord, bool with_dist, bool with_hash, bool asc_order, const reply_callback_t& reply_callback);
+  client& georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit,
+      bool with_coord, bool with_dist, bool with_hash, bool asc_order, std::size_t count,
+      const reply_callback_t& reply_callback);
+  client& georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit,
+      bool with_coord, bool with_dist, bool with_hash, bool asc_order, const std::string& store_key,
+      const reply_callback_t& reply_callback);
+  client& georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit,
+      bool with_coord, bool with_dist, bool with_hash, bool asc_order, const std::string& store_key,
+      const std::string& storedist_key, const reply_callback_t& reply_callback);
+  client& georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit,
+      bool with_coord, bool with_dist, bool with_hash, bool asc_order, std::size_t count, const std::string& store_key,
+      const reply_callback_t& reply_callback);
+  client& georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit,
+      bool with_coord, bool with_dist, bool with_hash, bool asc_order, std::size_t count, const std::string& store_key,
+      const std::string& storedist_key, const reply_callback_t& reply_callback);
+  std::future<reply> georadius(const std::string& key, double longitude, double latitude, double radius, geo_unit unit,
+      bool with_coord = false, bool with_dist = false, bool with_hash = false, bool asc_order = false,
+      std::size_t count = 0, const std::string& store_key = "", const std::string& storedist_key = "");
 
-  client& georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit, bool with_coord, bool with_dist, bool with_hash, bool asc_order, const reply_callback_t& reply_callback);
-  client& georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit, bool with_coord, bool with_dist, bool with_hash, bool asc_order, std::size_t count, const reply_callback_t& reply_callback);
-  client& georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit, bool with_coord, bool with_dist, bool with_hash, bool asc_order, const std::string& store_key, const reply_callback_t& reply_callback);
-  client& georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit, bool with_coord, bool with_dist, bool with_hash, bool asc_order, const std::string& store_key, const std::string& storedist_key, const reply_callback_t& reply_callback);
-  client& georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit, bool with_coord, bool with_dist, bool with_hash, bool asc_order, std::size_t count, const std::string& store_key, const reply_callback_t& reply_callback);
-  client& georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit, bool with_coord, bool with_dist, bool with_hash, bool asc_order, std::size_t count, const std::string& store_key, const std::string& storedist_key, const reply_callback_t& reply_callback);
-  std::future<reply> georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit, bool with_coord = false, bool with_dist = false, bool with_hash = false, bool asc_order = false, std::size_t count = 0, const std::string& store_key = "", const std::string& storedist_key = "");
+  client& georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit,
+      bool with_coord, bool with_dist, bool with_hash, bool asc_order, const reply_callback_t& reply_callback);
+  client& georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit,
+      bool with_coord, bool with_dist, bool with_hash, bool asc_order, std::size_t count,
+      const reply_callback_t& reply_callback);
+  client& georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit,
+      bool with_coord, bool with_dist, bool with_hash, bool asc_order, const std::string& store_key,
+      const reply_callback_t& reply_callback);
+  client& georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit,
+      bool with_coord, bool with_dist, bool with_hash, bool asc_order, const std::string& store_key,
+      const std::string& storedist_key, const reply_callback_t& reply_callback);
+  client& georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit,
+      bool with_coord, bool with_dist, bool with_hash, bool asc_order, std::size_t count, const std::string& store_key,
+      const reply_callback_t& reply_callback);
+  client& georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit,
+      bool with_coord, bool with_dist, bool with_hash, bool asc_order, std::size_t count, const std::string& store_key,
+      const std::string& storedist_key, const reply_callback_t& reply_callback);
+  std::future<reply> georadiusbymember(const std::string& key, const std::string& member, double radius, geo_unit unit,
+      bool with_coord = false, bool with_dist = false, bool with_hash = false, bool asc_order = false,
+      std::size_t count = 0, const std::string& store_key = "", const std::string& storedist_key = "");
 
   client& get(const std::string& key, const reply_callback_t& reply_callback);
   std::future<reply> get(const std::string& key);
@@ -729,7 +783,8 @@ public:
   client& hincrby(const std::string& key, const std::string& field, int incr, const reply_callback_t& reply_callback);
   std::future<reply> hincrby(const std::string& key, const std::string& field, int incr);
 
-  client& hincrbyfloat(const std::string& key, const std::string& field, float incr, const reply_callback_t& reply_callback);
+  client& hincrbyfloat(const std::string& key, const std::string& field, float incr,
+      const reply_callback_t& reply_callback);
   std::future<reply> hincrbyfloat(const std::string& key, const std::string& field, float incr);
 
   client& hkeys(const std::string& key, const reply_callback_t& reply_callback);
@@ -738,28 +793,34 @@ public:
   client& hlen(const std::string& key, const reply_callback_t& reply_callback);
   std::future<reply> hlen(const std::string& key);
 
-  client& hmget(const std::string& key, const std::vector<std::string>& fields, const reply_callback_t& reply_callback);
+  client& hmget(const std::string& key, const std::vector<std::string>& fields,
+      const reply_callback_t& reply_callback);
   std::future<reply> hmget(const std::string& key, const std::vector<std::string>& fields);
 
-  client& hmset(const std::string& key, const std::vector<std::pair<std::string, std::string>>& field_val, const reply_callback_t& reply_callback);
+  client& hmset(const std::string& key, const std::vector<std::pair<std::string, std::string>>& field_val,
+      const reply_callback_t& reply_callback);
   std::future<reply> hmset(const std::string& key, const std::vector<std::pair<std::string, std::string>>& field_val);
 
   client& hscan(const std::string& key, std::size_t cursor, const reply_callback_t& reply_callback);
   std::future<reply> hscan(const std::string& key, std::size_t cursor);
 
-  client& hscan(const std::string& key, std::size_t cursor, const std::string& pattern, const reply_callback_t& reply_callback);
+  client& hscan(const std::string& key, std::size_t cursor, const std::string& pattern,
+      const reply_callback_t& reply_callback);
   std::future<reply> hscan(const std::string& key, std::size_t cursor, const std::string& pattern);
 
   client& hscan(const std::string& key, std::size_t cursor, std::size_t count, const reply_callback_t& reply_callback);
   std::future<reply> hscan(const std::string& key, std::size_t cursor, std::size_t count);
 
-  client& hscan(const std::string& key, std::size_t cursor, const std::string& pattern, std::size_t count, const reply_callback_t& reply_callback);
+  client& hscan(const std::string& key, std::size_t cursor, const std::string& pattern, std::size_t count,
+      const reply_callback_t& reply_callback);
   std::future<reply> hscan(const std::string& key, std::size_t cursor, const std::string& pattern, std::size_t count);
 
-  client& hset(const std::string& key, const std::string& field, const std::string& value, const reply_callback_t& reply_callback);
+  client& hset(const std::string& key, const std::string& field, const std::string& value,
+      const reply_callback_t& reply_callback);
   std::future<reply> hset(const std::string& key, const std::string& field, const std::string& value);
 
-  client& hsetnx(const std::string& key, const std::string& field, const std::string& value, const reply_callback_t& reply_callback);
+  client& hsetnx(const std::string& key, const std::string& field, const std::string& value,
+      const reply_callback_t& reply_callback);
   std::future<reply> hsetnx(const std::string& key, const std::string& field, const std::string& value);
 
   client& hstrlen(const std::string& key, const std::string& field, const reply_callback_t& reply_callback);
@@ -790,8 +851,10 @@ public:
   client& lindex(const std::string& key, int index, const reply_callback_t& reply_callback);
   std::future<reply> lindex(const std::string& key, int index);
 
-  client& linsert(const std::string& key, const std::string& before_after, const std::string& pivot, const std::string& value, const reply_callback_t& reply_callback);
-  std::future<reply> linsert(const std::string& key, const std::string& before_after, const std::string& pivot, const std::string& value);
+  client& linsert(const std::string& key, const std::string& before_after, const std::string& pivot,
+      const std::string& value, const reply_callback_t& reply_callback);
+  std::future<reply> linsert(const std::string& key, const std::string& before_after, const std::string& pivot,
+      const std::string& value);
 
   client& llen(const std::string& key, const reply_callback_t& reply_callback);
   std::future<reply> llen(const std::string& key);
@@ -799,7 +862,8 @@ public:
   client& lpop(const std::string& key, const reply_callback_t& reply_callback);
   std::future<reply> lpop(const std::string& key);
 
-  client& lpush(const std::string& key, const std::vector<std::string>& values, const reply_callback_t& reply_callback);
+  client& lpush(const std::string& key, const std::vector<std::string>& values,
+      const reply_callback_t& reply_callback);
   std::future<reply> lpush(const std::string& key, const std::vector<std::string>& values);
 
   client& lpushx(const std::string& key, const std::string& value, const reply_callback_t& reply_callback);
@@ -820,9 +884,12 @@ public:
   client& mget(const std::vector<std::string>& keys, const reply_callback_t& reply_callback);
   std::future<reply> mget(const std::vector<std::string>& keys);
 
-  client& migrate(const std::string& host, int port, const std::string& key, const std::string& dest_db, int timeout, const reply_callback_t& reply_callback);
-  client& migrate(const std::string& host, int port, const std::string& key, const std::string& dest_db, int timeout, bool copy, bool replace, const std::vector<std::string>& keys, const reply_callback_t& reply_callback);
-  std::future<reply> migrate(const std::string& host, int port, const std::string& key, const std::string& dest_db, int timeout, bool copy = false, bool replace = false, const std::vector<std::string>& keys = {});
+  client& migrate(const std::string& host, int port, const std::string& key, const std::string& dest_db, int timeout,
+      const reply_callback_t& reply_callback);
+  client& migrate(const std::string& host, int port, const std::string& key, const std::string& dest_db, int timeout,
+      bool copy, bool replace, const std::vector<std::string>& keys, const reply_callback_t& reply_callback);
+  std::future<reply> migrate(const std::string& host, int port, const std::string& key, const std::string& dest_db,
+      int timeout, bool copy = false, bool replace = false, const std::vector<std::string>& keys = {});
 
   client& monitor(const reply_callback_t& reply_callback);
   std::future<reply> monitor();
@@ -830,16 +897,19 @@ public:
   client& move(const std::string& key, const std::string& db, const reply_callback_t& reply_callback);
   std::future<reply> move(const std::string& key, const std::string& db);
 
-  client& mset(const std::vector<std::pair<std::string, std::string>>& key_vals, const reply_callback_t& reply_callback);
+  client& mset(const std::vector<std::pair<std::string, std::string>>& key_vals,
+      const reply_callback_t& reply_callback);
   std::future<reply> mset(const std::vector<std::pair<std::string, std::string>>& key_vals);
 
-  client& msetnx(const std::vector<std::pair<std::string, std::string>>& key_vals, const reply_callback_t& reply_callback);
+  client& msetnx(const std::vector<std::pair<std::string, std::string>>& key_vals,
+      const reply_callback_t& reply_callback);
   std::future<reply> msetnx(const std::vector<std::pair<std::string, std::string>>& key_vals);
 
   client& multi(const reply_callback_t& reply_callback);
   std::future<reply> multi();
 
-  client& object(const std::string& subcommand, const std::vector<std::string>& args, const reply_callback_t& reply_callback);
+  client& object(const std::string& subcommand, const std::vector<std::string>& args,
+      const reply_callback_t& reply_callback);
   std::future<reply> object(const std::string& subcommand, const std::vector<std::string>& args);
 
   client& persist(const std::string& key, const reply_callback_t& reply_callback);
@@ -851,13 +921,15 @@ public:
   client& pexpireat(const std::string& key, int milliseconds_timestamp, const reply_callback_t& reply_callback);
   std::future<reply> pexpireat(const std::string& key, int milliseconds_timestamp);
 
-  client& pfadd(const std::string& key, const std::vector<std::string>& elements, const reply_callback_t& reply_callback);
+  client& pfadd(const std::string& key, const std::vector<std::string>& elements,
+      const reply_callback_t& reply_callback);
   std::future<reply> pfadd(const std::string& key, const std::vector<std::string>& elements);
 
   client& pfcount(const std::vector<std::string>& keys, const reply_callback_t& reply_callback);
   std::future<reply> pfcount(const std::vector<std::string>& keys);
 
-  client& pfmerge(const std::string& destkey, const std::vector<std::string>& sourcekeys, const reply_callback_t& reply_callback);
+  client& pfmerge(const std::string& destkey, const std::vector<std::string>& sourcekeys,
+      const reply_callback_t& reply_callback);
   std::future<reply> pfmerge(const std::string& destkey, const std::vector<std::string>& sourcekeys);
 
   client& ping(const reply_callback_t& reply_callback);
@@ -866,13 +938,16 @@ public:
   client& ping(const std::string& message, const reply_callback_t& reply_callback);
   std::future<reply> ping(const std::string& message);
 
-  client& psetex(const std::string& key, int milliseconds, const std::string& val, const reply_callback_t& reply_callback);
+  client& psetex(const std::string& key, int milliseconds, const std::string& val,
+      const reply_callback_t& reply_callback);
   std::future<reply> psetex(const std::string& key, int milliseconds, const std::string& val);
 
-  client& publish(const std::string& channel, const std::string& message, const reply_callback_t& reply_callback);
+  client& publish(const std::string& channel, const std::string& message,
+      const reply_callback_t& reply_callback);
   std::future<reply> publish(const std::string& channel, const std::string& message);
 
-  client& pubsub(const std::string& subcommand, const std::vector<std::string>& args, const reply_callback_t& reply_callback);
+  client& pubsub(const std::string& subcommand, const std::vector<std::string>& args,
+      const reply_callback_t& reply_callback);
   std::future<reply> pubsub(const std::string& subcommand, const std::vector<std::string>& args);
 
   client& pttl(const std::string& key, const reply_callback_t& reply_callback);
@@ -896,11 +971,14 @@ public:
   client& renamenx(const std::string& key, const std::string& newkey, const reply_callback_t& reply_callback);
   std::future<reply> renamenx(const std::string& key, const std::string& newkey);
 
-  client& restore(const std::string& key, int ttl, const std::string& serialized_value, const reply_callback_t& reply_callback);
+  client& restore(const std::string& key, int ttl, const std::string& serialized_value,
+      const reply_callback_t& reply_callback);
   std::future<reply> restore(const std::string& key, int ttl, const std::string& serialized_value);
 
-  client& restore(const std::string& key, int ttl, const std::string& serialized_value, const std::string& replace, const reply_callback_t& reply_callback);
-  std::future<reply> restore(const std::string& key, int ttl, const std::string& serialized_value, const std::string& replace);
+  client& restore(const std::string& key, int ttl, const std::string& serialized_value,
+      const std::string& replace, const reply_callback_t& reply_callback);
+  std::future<reply> restore(const std::string& key, int ttl, const std::string& serialized_value,
+      const std::string& replace);
 
   client& role(const reply_callback_t& reply_callback);
   std::future<reply> role();
@@ -911,13 +989,15 @@ public:
   client& rpoplpush(const std::string& source, const std::string& destination, const reply_callback_t& reply_callback);
   std::future<reply> rpoplpush(const std::string& src, const std::string& dst);
 
-  client& rpush(const std::string& key, const std::vector<std::string>& values, const reply_callback_t& reply_callback);
+  client& rpush(const std::string& key, const std::vector<std::string>& values,
+      const reply_callback_t& reply_callback);
   std::future<reply> rpush(const std::string& key, const std::vector<std::string>& values);
 
   client& rpushx(const std::string& key, const std::string& value, const reply_callback_t& reply_callback);
   std::future<reply> rpushx(const std::string& key, const std::string& value);
 
-  client& sadd(const std::string& key, const std::vector<std::string>& members, const reply_callback_t& reply_callback);
+  client& sadd(const std::string& key, const std::vector<std::string>& members,
+      const reply_callback_t& reply_callback);
   std::future<reply> sadd(const std::string& key, const std::vector<std::string>& members);
 
   client& save(const reply_callback_t& reply_callback);
@@ -932,7 +1012,8 @@ public:
   client& scan(std::size_t cursor, std::size_t count, const reply_callback_t& reply_callback);
   std::future<reply> scan(std::size_t cursor, std::size_t count);
 
-  client& scan(std::size_t cursor, const std::string& pattern, std::size_t count, const reply_callback_t& reply_callback);
+  client& scan(std::size_t cursor, const std::string& pattern, std::size_t count,
+      const reply_callback_t& reply_callback);
   std::future<reply> scan(std::size_t cursor, const std::string& pattern, std::size_t count);
 
   client& scard(const std::string& key, const reply_callback_t& reply_callback);
@@ -956,7 +1037,8 @@ public:
   client& sdiff(const std::vector<std::string>& keys, const reply_callback_t& reply_callback);
   std::future<reply> sdiff(const std::vector<std::string>& keys);
 
-  client& sdiffstore(const std::string& destination, const std::vector<std::string>& keys, const reply_callback_t& reply_callback);
+  client& sdiffstore(const std::string& destination, const std::vector<std::string>& keys,
+      const reply_callback_t& reply_callback);
   std::future<reply> sdiffstore(const std::string& dst, const std::vector<std::string>& keys);
 
   client& select(int index, const reply_callback_t& reply_callback);
@@ -966,10 +1048,13 @@ public:
   std::future<reply> set(const std::string& key, const std::string& value);
 
   client& set_advanced(const std::string& key, const std::string& value, const reply_callback_t& reply_callback);
-  client& set_advanced(const std::string& key, const std::string& value, bool ex, int ex_sec, bool px, int px_milli, bool nx, bool xx, const reply_callback_t& reply_callback);
-  std::future<reply> set_advanced(const std::string& key, const std::string& value, bool ex = false, int ex_sec = 0, bool px = false, int px_milli = 0, bool nx = false, bool xx = false);
+  client& set_advanced(const std::string& key, const std::string& value, bool ex, int ex_sec, bool px, int px_milli,
+      bool nx, bool xx, const reply_callback_t& reply_callback);
+  std::future<reply> set_advanced(const std::string& key, const std::string& value, bool ex = false, int ex_sec = 0,
+      bool px = false, int px_milli = 0, bool nx = false, bool xx = false);
 
-  client& setbit_(const std::string& key, int offset, const std::string& value, const reply_callback_t& reply_callback);
+  client& setbit_(const std::string& key, int offset, const std::string& value,
+      const reply_callback_t& reply_callback);
   std::future<reply> setbit_(const std::string& key, int offset, const std::string& value);
 
   client& setex(const std::string& key, int seconds, const std::string& value, const reply_callback_t& reply_callback);
@@ -978,7 +1063,8 @@ public:
   client& setnx(const std::string& key, const std::string& value, const reply_callback_t& reply_callback);
   std::future<reply> setnx(const std::string& key, const std::string& value);
 
-  client& setrange(const std::string& key, int offset, const std::string& value, const reply_callback_t& reply_callback);
+  client& setrange(const std::string& key, int offset, const std::string& value,
+      const reply_callback_t& reply_callback);
   std::future<reply> setrange(const std::string& key, int offset, const std::string& value);
 
   client& shutdown(const reply_callback_t& reply_callback);
@@ -990,10 +1076,12 @@ public:
   client& sinter(const std::vector<std::string>& keys, const reply_callback_t& reply_callback);
   std::future<reply> sinter(const std::vector<std::string>& keys);
 
-  client& sinterstore(const std::string& destination, const std::vector<std::string>& keys, const reply_callback_t& reply_callback);
+  client& sinterstore(const std::string& destination, const std::vector<std::string>& keys,
+      const reply_callback_t& reply_callback);
   std::future<reply> sinterstore(const std::string& dst, const std::vector<std::string>& keys);
 
-  client& sismember(const std::string& key, const std::string& member, const reply_callback_t& reply_callback);
+  client& sismember(const std::string& key, const std::string& member,
+      const reply_callback_t& reply_callback);
   std::future<reply> sismember(const std::string& key, const std::string& member);
 
   client& slaveof(const std::string& host, int port, const reply_callback_t& reply_callback);
@@ -1002,41 +1090,63 @@ public:
   client& slowlog(const std::string subcommand, const reply_callback_t& reply_callback);
   std::future<reply> slowlog(const std::string& subcommand);
 
-  client& slowlog(const std::string subcommand, const std::string& argument, const reply_callback_t& reply_callback);
+  client& slowlog(const std::string subcommand, const std::string& argument,
+      const reply_callback_t& reply_callback);
   std::future<reply> slowlog(const std::string& subcommand, const std::string& argument);
 
   client& smembers(const std::string& key, const reply_callback_t& reply_callback);
   std::future<reply> smembers(const std::string& key);
 
-  client& smove(const std::string& source, const std::string& destination, const std::string& member, const reply_callback_t& reply_callback);
+  client& smove(const std::string& source, const std::string& destination, const std::string& member,
+      const reply_callback_t& reply_callback);
   std::future<reply> smove(const std::string& src, const std::string& dst, const std::string& member);
 
   client& sort(const std::string& key, const reply_callback_t& reply_callback);
   std::future<reply> sort(const std::string& key);
 
-  client& sort(const std::string& key, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const reply_callback_t& reply_callback);
-  std::future<reply> sort(const std::string& key, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha);
+  client& sort(const std::string& key, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha,
+      const reply_callback_t& reply_callback);
+  std::future<reply> sort(const std::string& key, const std::vector<std::string>& get_patterns, bool asc_order,
+      bool alpha);
 
-  client& sort(const std::string& key, std::size_t offset, std::size_t count, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const reply_callback_t& reply_callback);
-  std::future<reply> sort(const std::string& key, std::size_t offset, std::size_t count, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha);
+  client& sort(const std::string& key, std::size_t offset, std::size_t count,
+      const std::vector<std::string>& get_patterns, bool asc_order, bool alpha,
+      const reply_callback_t& reply_callback);
+  std::future<reply> sort(const std::string& key, std::size_t offset, std::size_t count,
+      const std::vector<std::string>& get_patterns, bool asc_order, bool alpha);
 
-  client& sort(const std::string& key, const std::string& by_pattern, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const reply_callback_t& reply_callback);
-  std::future<reply> sort(const std::string& key, const std::string& by_pattern, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha);
+  client& sort(const std::string& key, const std::string& by_pattern, const std::vector<std::string>& get_patterns,
+      bool asc_order, bool alpha, const reply_callback_t& reply_callback);
+  std::future<reply> sort(const std::string& key, const std::string& by_pattern,
+      const std::vector<std::string>& get_patterns, bool asc_order, bool alpha);
 
-  client& sort(const std::string& key, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest, const reply_callback_t& reply_callback);
-  std::future<reply> sort(const std::string& key, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest);
+  client& sort(const std::string& key, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha,
+      const std::string& store_dest, const reply_callback_t& reply_callback);
+  std::future<reply> sort(const std::string& key, const std::vector<std::string>& get_patterns, bool asc_order,
+      bool alpha, const std::string& store_dest);
 
-  client& sort(const std::string& key, std::size_t offset, std::size_t count, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest, const reply_callback_t& reply_callback);
-  std::future<reply> sort(const std::string& key, std::size_t offset, std::size_t count, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest);
+  client& sort(const std::string& key, std::size_t offset, std::size_t count,
+      const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest,
+      const reply_callback_t& reply_callback);
+  std::future<reply> sort(const std::string& key, std::size_t offset, std::size_t count,
+      const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest);
 
-  client& sort(const std::string& key, const std::string& by_pattern, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest, const reply_callback_t& reply_callback);
-  std::future<reply> sort(const std::string& key, const std::string& by_pattern, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest);
+  client& sort(const std::string& key, const std::string& by_pattern, const std::vector<std::string>& get_patterns,
+      bool asc_order, bool alpha, const std::string& store_dest, const reply_callback_t& reply_callback);
+  std::future<reply> sort(const std::string& key, const std::string& by_pattern,
+      const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest);
 
-  client& sort(const std::string& key, const std::string& by_pattern, std::size_t offset, std::size_t count, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const reply_callback_t& reply_callback);
-  std::future<reply> sort(const std::string& key, const std::string& by_pattern, std::size_t offset, std::size_t count, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha);
+  client& sort(const std::string& key, const std::string& by_pattern, std::size_t offset, std::size_t count,
+      const std::vector<std::string>& get_patterns, bool asc_order, bool alpha,
+      const reply_callback_t& reply_callback);
+  std::future<reply> sort(const std::string& key, const std::string& by_pattern, std::size_t offset, std::size_t count,
+      const std::vector<std::string>& get_patterns, bool asc_order, bool alpha);
 
-  client& sort(const std::string& key, const std::string& by_pattern, std::size_t offset, std::size_t count, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest, const reply_callback_t& reply_callback);
-  std::future<reply> sort(const std::string& key, const std::string& by_pattern, std::size_t offset, std::size_t count, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest);
+  client& sort(const std::string& key, const std::string& by_pattern, std::size_t offset, std::size_t count,
+      const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest,
+      const reply_callback_t& reply_callback);
+  std::future<reply> sort(const std::string& key, const std::string& by_pattern, std::size_t offset, std::size_t count,
+      const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest);
 
   client& spop(const std::string& key, const reply_callback_t& reply_callback);
   std::future<reply> spop(const std::string& key);
@@ -1050,19 +1160,22 @@ public:
   client& srandmember(const std::string& key, int count, const reply_callback_t& reply_callback);
   std::future<reply> srandmember(const std::string& key, int count);
 
-  client& srem(const std::string& key, const std::vector<std::string>& members, const reply_callback_t& reply_callback);
+  client& srem(const std::string& key, const std::vector<std::string>& members,
+      const reply_callback_t& reply_callback);
   std::future<reply> srem(const std::string& key, const std::vector<std::string>& members);
 
   client& sscan(const std::string& key, std::size_t cursor, const reply_callback_t& reply_callback);
   std::future<reply> sscan(const std::string& key, std::size_t cursor);
 
-  client& sscan(const std::string& key, std::size_t cursor, const std::string& pattern, const reply_callback_t& reply_callback);
+  client& sscan(const std::string& key, std::size_t cursor, const std::string& pattern,
+      const reply_callback_t& reply_callback);
   std::future<reply> sscan(const std::string& key, std::size_t cursor, const std::string& pattern);
 
   client& sscan(const std::string& key, std::size_t cursor, std::size_t count, const reply_callback_t& reply_callback);
   std::future<reply> sscan(const std::string& key, std::size_t cursor, std::size_t count);
 
-  client& sscan(const std::string& key, std::size_t cursor, const std::string& pattern, std::size_t count, const reply_callback_t& reply_callback);
+  client& sscan(const std::string& key, std::size_t cursor, const std::string& pattern, std::size_t count,
+      const reply_callback_t& reply_callback);
   std::future<reply> sscan(const std::string& key, std::size_t cursor, const std::string& pattern, std::size_t count);
 
   client& strlen(const std::string& key, const reply_callback_t& reply_callback);
@@ -1071,7 +1184,8 @@ public:
   client& sunion(const std::vector<std::string>& keys, const reply_callback_t& reply_callback);
   std::future<reply> sunion(const std::vector<std::string>& keys);
 
-  client& sunionstore(const std::string& destination, const std::vector<std::string>& keys, const reply_callback_t& reply_callback);
+  client& sunionstore(const std::string& destination, const std::vector<std::string>& keys,
+      const reply_callback_t& reply_callback);
   std::future<reply> sunionstore(const std::string& dst, const std::vector<std::string>& keys);
 
   client& sync(const reply_callback_t& reply_callback);
@@ -1095,8 +1209,10 @@ public:
   client& watch(const std::vector<std::string>& keys, const reply_callback_t& reply_callback);
   std::future<reply> watch(const std::vector<std::string>& keys);
 
-  client& zadd(const std::string& key, const std::vector<std::string>& options, const std::multimap<std::string, std::string>& score_members, const reply_callback_t& reply_callback);
-  std::future<reply> zadd(const std::string& key, const std::vector<std::string>& options, const std::multimap<std::string, std::string>& score_members);
+  client& zadd(const std::string& key, const std::vector<std::string>& options,
+      const std::multimap<std::string, std::string>& score_members, const reply_callback_t& reply_callback);
+  std::future<reply> zadd(const std::string& key, const std::vector<std::string>& options,
+      const std::multimap<std::string, std::string>& score_members);
 
   client& zcard(const std::string& key, const reply_callback_t& reply_callback);
   std::future<reply> zcard(const std::string& key);
@@ -1107,20 +1223,25 @@ public:
   client& zcount(const std::string& key, double min, double max, const reply_callback_t& reply_callback);
   std::future<reply> zcount(const std::string& key, double min, double max);
 
-  client& zcount(const std::string& key, const std::string& min, const std::string& max, const reply_callback_t& reply_callback);
+  client& zcount(const std::string& key, const std::string& min, const std::string& max,
+      const reply_callback_t& reply_callback);
   std::future<reply> zcount(const std::string& key, const std::string& min, const std::string& max);
 
   client& zincrby(const std::string& key, int incr, const std::string& member, const reply_callback_t& reply_callback);
   std::future<reply> zincrby(const std::string& key, int incr, const std::string& member);
 
-  client& zincrby(const std::string& key, double incr, const std::string& member, const reply_callback_t& reply_callback);
+  client& zincrby(const std::string& key, double incr, const std::string& member,
+      const reply_callback_t& reply_callback);
   std::future<reply> zincrby(const std::string& key, double incr, const std::string& member);
 
-  client& zincrby(const std::string& key, const std::string& incr, const std::string& member, const reply_callback_t& reply_callback);
+  client& zincrby(const std::string& key, const std::string& incr, const std::string& member,
+      const reply_callback_t& reply_callback);
   std::future<reply> zincrby(const std::string& key, const std::string& incr, const std::string& member);
 
-  client& zinterstore(const std::string& destination, std::size_t numkeys, const std::vector<std::string>& keys, const std::vector<std::size_t> weights, aggregate_method method, const reply_callback_t& reply_callback);
-  std::future<reply> zinterstore(const std::string& destination, std::size_t numkeys, const std::vector<std::string>& keys, const std::vector<std::size_t> weights, aggregate_method method);
+  client& zinterstore(const std::string& destination, std::size_t numkeys, const std::vector<std::string>& keys,
+      const std::vector<std::size_t> weights, aggregate_method method, const reply_callback_t& reply_callback);
+  std::future<reply> zinterstore(const std::string& destination, std::size_t numkeys,
+      const std::vector<std::string>& keys, const std::vector<std::size_t> weights, aggregate_method method);
 
   client& zlexcount(const std::string& key, int min, int max, const reply_callback_t& reply_callback);
   std::future<reply> zlexcount(const std::string& key, int min, int max);
@@ -1128,7 +1249,8 @@ public:
   client& zlexcount(const std::string& key, double min, double max, const reply_callback_t& reply_callback);
   std::future<reply> zlexcount(const std::string& key, double min, double max);
 
-  client& zlexcount(const std::string& key, const std::string& min, const std::string& max, const reply_callback_t& reply_callback);
+  client& zlexcount(const std::string& key, const std::string& min, const std::string& max,
+      const reply_callback_t& reply_callback);
   std::future<reply> zlexcount(const std::string& key, const std::string& min, const std::string& max);
 
   client& zrange(const std::string& key, int start, int stop, const reply_callback_t& reply_callback);
@@ -1136,65 +1258,98 @@ public:
   std::future<reply> zrange(const std::string& key, int start, int stop, bool withscores = false);
 
   client& zrange(const std::string& key, double start, double stop, const reply_callback_t& reply_callback);
-  client& zrange(const std::string& key, double start, double stop, bool withscores, const reply_callback_t& reply_callback);
+  client& zrange(const std::string& key, double start, double stop, bool withscores,
+      const reply_callback_t& reply_callback);
   std::future<reply> zrange(const std::string& key, double start, double stop, bool withscores = false);
 
-  client& zrange(const std::string& key, const std::string& start, const std::string& stop, const reply_callback_t& reply_callback);
-  client& zrange(const std::string& key, const std::string& start, const std::string& stop, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrange(const std::string& key, const std::string& start, const std::string& stop, bool withscores = false);
+  client& zrange(const std::string& key, const std::string& start, const std::string& stop,
+      const reply_callback_t& reply_callback);
+  client& zrange(const std::string& key, const std::string& start, const std::string& stop, bool withscores,
+      const reply_callback_t& reply_callback);
+  std::future<reply> zrange(const std::string& key, const std::string& start, const std::string& stop,
+      bool withscores = false);
 
   client& zrangebylex(const std::string& key, int min, int max, const reply_callback_t& reply_callback);
-  client& zrangebylex(const std::string& key, int min, int max, bool withscores, const reply_callback_t& reply_callback);
+  client& zrangebylex(const std::string& key, int min, int max, bool withscores,
+      const reply_callback_t& reply_callback);
   std::future<reply> zrangebylex(const std::string& key, int min, int max, bool withscores = false);
 
   client& zrangebylex(const std::string& key, double min, double max, const reply_callback_t& reply_callback);
-  client& zrangebylex(const std::string& key, double min, double max, bool withscores, const reply_callback_t& reply_callback);
+  client& zrangebylex(const std::string& key, double min, double max, bool withscores,
+      const reply_callback_t& reply_callback);
   std::future<reply> zrangebylex(const std::string& key, double min, double max, bool withscores = false);
 
-  client& zrangebylex(const std::string& key, const std::string& min, const std::string& max, const reply_callback_t& reply_callback);
-  client& zrangebylex(const std::string& key, const std::string& min, const std::string& max, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrangebylex(const std::string& key, const std::string& min, const std::string& max, bool withscores = false);
+  client& zrangebylex(const std::string& key, const std::string& min, const std::string& max,
+      const reply_callback_t& reply_callback);
+  client& zrangebylex(const std::string& key, const std::string& min, const std::string& max,
+      bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrangebylex(const std::string& key, const std::string& min, const std::string& max,
+      bool withscores = false);
 
-  client& zrangebylex(const std::string& key, int min, int max, std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
-  client& zrangebylex(const std::string& key, int min, int max, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrangebylex(const std::string& key, int min, int max, std::size_t offset, std::size_t count, bool withscores = false);
+  client& zrangebylex(const std::string& key, int min, int max, std::size_t offset, std::size_t count,
+      const reply_callback_t& reply_callback);
+  client& zrangebylex(const std::string& key, int min, int max, std::size_t offset, std::size_t count,
+      bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrangebylex(const std::string& key, int min, int max, std::size_t offset, std::size_t count,
+      bool withscores = false);
 
-  client& zrangebylex(const std::string& key, double min, double max, std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
-  client& zrangebylex(const std::string& key, double min, double max, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrangebylex(const std::string& key, double min, double max, std::size_t offset, std::size_t count, bool withscores = false);
+  client& zrangebylex(const std::string& key, double min, double max, std::size_t offset, std::size_t count,
+      const reply_callback_t& reply_callback);
+  client& zrangebylex(const std::string& key, double min, double max, std::size_t offset, std::size_t count,
+      bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrangebylex(const std::string& key, double min, double max, std::size_t offset, std::size_t count,
+      bool withscores = false);
 
-  client& zrangebylex(const std::string& key, const std::string& min, const std::string& max, std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
-  client& zrangebylex(const std::string& key, const std::string& min, const std::string& max, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrangebylex(const std::string& key, const std::string& min, const std::string& max, std::size_t offset, std::size_t count, bool withscores = false);
+  client& zrangebylex(const std::string& key, const std::string& min, const std::string& max,
+      std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
+  client& zrangebylex(const std::string& key, const std::string& min, const std::string& max,
+      std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrangebylex(const std::string& key, const std::string& min, const std::string& max,
+      std::size_t offset, std::size_t count, bool withscores = false);
 
   client& zrangebyscore(const std::string& key, int min, int max, const reply_callback_t& reply_callback);
-  client& zrangebyscore(const std::string& key, int min, int max, bool withscores, const reply_callback_t& reply_callback);
+  client& zrangebyscore(const std::string& key, int min, int max, bool withscores,
+      const reply_callback_t& reply_callback);
   std::future<reply> zrangebyscore(const std::string& key, int min, int max, bool withscores = false);
 
   client& zrangebyscore(const std::string& key, double min, double max, const reply_callback_t& reply_callback);
-  client& zrangebyscore(const std::string& key, double min, double max, bool withscores, const reply_callback_t& reply_callback);
+  client& zrangebyscore(const std::string& key, double min, double max, bool withscores,
+      const reply_callback_t& reply_callback);
   std::future<reply> zrangebyscore(const std::string& key, double min, double max, bool withscores = false);
 
-  client& zrangebyscore(const std::string& key, const std::string& min, const std::string& max, const reply_callback_t& reply_callback);
-  client& zrangebyscore(const std::string& key, const std::string& min, const std::string& max, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrangebyscore(const std::string& key, const std::string& min, const std::string& max, bool withscores = false);
+  client& zrangebyscore(const std::string& key, const std::string& min, const std::string& max,
+      const reply_callback_t& reply_callback);
+  client& zrangebyscore(const std::string& key, const std::string& min, const std::string& max,
+      bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrangebyscore(const std::string& key, const std::string& min, const std::string& max,
+      bool withscores = false);
 
-  client& zrangebyscore(const std::string& key, int min, int max, std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
-  client& zrangebyscore(const std::string& key, int min, int max, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrangebyscore(const std::string& key, int min, int max, std::size_t offset, std::size_t count, bool withscores = false);
+  client& zrangebyscore(const std::string& key, int min, int max, std::size_t offset, std::size_t count,
+      const reply_callback_t& reply_callback);
+  client& zrangebyscore(const std::string& key, int min, int max, std::size_t offset, std::size_t count,
+      bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrangebyscore(const std::string& key, int min, int max, std::size_t offset, std::size_t count,
+      bool withscores = false);
 
-  client& zrangebyscore(const std::string& key, double min, double max, std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
-  client& zrangebyscore(const std::string& key, double min, double max, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrangebyscore(const std::string& key, double min, double max, std::size_t offset, std::size_t count, bool withscores = false);
+  client& zrangebyscore(const std::string& key, double min, double max, std::size_t offset,
+      std::size_t count, const reply_callback_t& reply_callback);
+  client& zrangebyscore(const std::string& key, double min, double max, std::size_t offset,
+      std::size_t count, bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrangebyscore(const std::string& key, double min, double max, std::size_t offset,
+      std::size_t count, bool withscores = false);
 
-  client& zrangebyscore(const std::string& key, const std::string& min, const std::string& max, std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
-  client& zrangebyscore(const std::string& key, const std::string& min, const std::string& max, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrangebyscore(const std::string& key, const std::string& min, const std::string& max, std::size_t offset, std::size_t count, bool withscores = false);
+  client& zrangebyscore(const std::string& key, const std::string& min, const std::string& max,
+      std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
+  client& zrangebyscore(const std::string& key, const std::string& min, const std::string& max,
+      std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrangebyscore(const std::string& key, const std::string& min, const std::string& max,
+      std::size_t offset, std::size_t count, bool withscores = false);
 
   client& zrank(const std::string& key, const std::string& member, const reply_callback_t& reply_callback);
   std::future<reply> zrank(const std::string& key, const std::string& member);
 
-  client& zrem(const std::string& key, const std::vector<std::string>& members, const reply_callback_t& reply_callback);
+  client& zrem(const std::string& key, const std::vector<std::string>& members,
+      const reply_callback_t& reply_callback);
   std::future<reply> zrem(const std::string& key, const std::vector<std::string>& members);
 
   client& zremrangebylex(const std::string& key, int min, int max, const reply_callback_t& reply_callback);
@@ -1203,7 +1358,8 @@ public:
   client& zremrangebylex(const std::string& key, double min, double max, const reply_callback_t& reply_callback);
   std::future<reply> zremrangebylex(const std::string& key, double min, double max);
 
-  client& zremrangebylex(const std::string& key, const std::string& min, const std::string& max, const reply_callback_t& reply_callback);
+  client& zremrangebylex(const std::string& key, const std::string& min, const std::string& max,
+      const reply_callback_t& reply_callback);
   std::future<reply> zremrangebylex(const std::string& key, const std::string& min, const std::string& max);
 
   client& zremrangebyrank(const std::string& key, int start, int stop, const reply_callback_t& reply_callback);
@@ -1212,7 +1368,8 @@ public:
   client& zremrangebyrank(const std::string& key, double start, double stop, const reply_callback_t& reply_callback);
   std::future<reply> zremrangebyrank(const std::string& key, double start, double stop);
 
-  client& zremrangebyrank(const std::string& key, const std::string& start, const std::string& stop, const reply_callback_t& reply_callback);
+  client& zremrangebyrank(const std::string& key, const std::string& start, const std::string& stop,
+      const reply_callback_t& reply_callback);
   std::future<reply> zremrangebyrank(const std::string& key, const std::string& start, const std::string& stop);
 
   client& zremrangebyscore(const std::string& key, int min, int max, const reply_callback_t& reply_callback);
@@ -1221,68 +1378,102 @@ public:
   client& zremrangebyscore(const std::string& key, double min, double max, const reply_callback_t& reply_callback);
   std::future<reply> zremrangebyscore(const std::string& key, double min, double max);
 
-  client& zremrangebyscore(const std::string& key, const std::string& min, const std::string& max, const reply_callback_t& reply_callback);
+  client& zremrangebyscore(const std::string& key, const std::string& min, const std::string& max,
+      const reply_callback_t& reply_callback);
   std::future<reply> zremrangebyscore(const std::string& key, const std::string& min, const std::string& max);
 
   client& zrevrange(const std::string& key, int start, int stop, const reply_callback_t& reply_callback);
-  client& zrevrange(const std::string& key, int start, int stop, bool withscores, const reply_callback_t& reply_callback);
+  client& zrevrange(const std::string& key, int start, int stop, bool withscores,
+      const reply_callback_t& reply_callback);
   std::future<reply> zrevrange(const std::string& key, int start, int stop, bool withscores = false);
 
   client& zrevrange(const std::string& key, double start, double stop, const reply_callback_t& reply_callback);
-  client& zrevrange(const std::string& key, double start, double stop, bool withscores, const reply_callback_t& reply_callback);
+  client& zrevrange(const std::string& key, double start, double stop, bool withscores,
+      const reply_callback_t& reply_callback);
   std::future<reply> zrevrange(const std::string& key, double start, double stop, bool withscores = false);
 
-  client& zrevrange(const std::string& key, const std::string& start, const std::string& stop, const reply_callback_t& reply_callback);
-  client& zrevrange(const std::string& key, const std::string& start, const std::string& stop, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrevrange(const std::string& key, const std::string& start, const std::string& stop, bool withscores = false);
+  client& zrevrange(const std::string& key, const std::string& start, const std::string& stop,
+      const reply_callback_t& reply_callback);
+  client& zrevrange(const std::string& key, const std::string& start, const std::string& stop,
+      bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrevrange(const std::string& key, const std::string& start, const std::string& stop,
+      bool withscores = false);
 
   client& zrevrangebylex(const std::string& key, int max, int min, const reply_callback_t& reply_callback);
-  client& zrevrangebylex(const std::string& key, int max, int min, bool withscores, const reply_callback_t& reply_callback);
+  client& zrevrangebylex(const std::string& key, int max, int min, bool withscores,
+      const reply_callback_t& reply_callback);
   std::future<reply> zrevrangebylex(const std::string& key, int max, int min, bool withscores = false);
 
   client& zrevrangebylex(const std::string& key, double max, double min, const reply_callback_t& reply_callback);
-  client& zrevrangebylex(const std::string& key, double max, double min, bool withscores, const reply_callback_t& reply_callback);
+  client& zrevrangebylex(const std::string& key, double max, double min, bool withscores,
+      const reply_callback_t& reply_callback);
   std::future<reply> zrevrangebylex(const std::string& key, double max, double min, bool withscores = false);
 
-  client& zrevrangebylex(const std::string& key, const std::string& max, const std::string& min, const reply_callback_t& reply_callback);
-  client& zrevrangebylex(const std::string& key, const std::string& max, const std::string& min, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrevrangebylex(const std::string& key, const std::string& max, const std::string& min, bool withscores = false);
+  client& zrevrangebylex(const std::string& key, const std::string& max, const std::string& min,
+      const reply_callback_t& reply_callback);
+  client& zrevrangebylex(const std::string& key, const std::string& max, const std::string& min,
+      bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrevrangebylex(const std::string& key, const std::string& max, const std::string& min,
+      bool withscores = false);
 
-  client& zrevrangebylex(const std::string& key, int max, int min, std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
-  client& zrevrangebylex(const std::string& key, int max, int min, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrevrangebylex(const std::string& key, int max, int min, std::size_t offset, std::size_t count, bool withscores = false);
+  client& zrevrangebylex(const std::string& key, int max, int min, std::size_t offset, std::size_t count,
+      const reply_callback_t& reply_callback);
+  client& zrevrangebylex(const std::string& key, int max, int min, std::size_t offset, std::size_t count,
+      bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrevrangebylex(const std::string& key, int max, int min, std::size_t offset, std::size_t count,
+      bool withscores = false);
 
-  client& zrevrangebylex(const std::string& key, double max, double min, std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
-  client& zrevrangebylex(const std::string& key, double max, double min, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrevrangebylex(const std::string& key, double max, double min, std::size_t offset, std::size_t count, bool withscores = false);
+  client& zrevrangebylex(const std::string& key, double max, double min, std::size_t offset,
+      std::size_t count, const reply_callback_t& reply_callback);
+  client& zrevrangebylex(const std::string& key, double max, double min, std::size_t offset,
+      std::size_t count, bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrevrangebylex(const std::string& key, double max, double min, std::size_t offset,
+      std::size_t count, bool withscores = false);
 
-  client& zrevrangebylex(const std::string& key, const std::string& max, const std::string& min, std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
-  client& zrevrangebylex(const std::string& key, const std::string& max, const std::string& min, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrevrangebylex(const std::string& key, const std::string& max, const std::string& min, std::size_t offset, std::size_t count, bool withscores = false);
+  client& zrevrangebylex(const std::string& key, const std::string& max, const std::string& min,
+      std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
+  client& zrevrangebylex(const std::string& key, const std::string& max, const std::string& min,
+      std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrevrangebylex(const std::string& key, const std::string& max, const std::string& min,
+      std::size_t offset, std::size_t count, bool withscores = false);
 
   client& zrevrangebyscore(const std::string& key, int max, int min, const reply_callback_t& reply_callback);
-  client& zrevrangebyscore(const std::string& key, int max, int min, bool withscores, const reply_callback_t& reply_callback);
+  client& zrevrangebyscore(const std::string& key, int max, int min, bool withscores,
+      const reply_callback_t& reply_callback);
   std::future<reply> zrevrangebyscore(const std::string& key, int max, int min, bool withscores = false);
 
   client& zrevrangebyscore(const std::string& key, double max, double min, const reply_callback_t& reply_callback);
-  client& zrevrangebyscore(const std::string& key, double max, double min, bool withscores, const reply_callback_t& reply_callback);
+  client& zrevrangebyscore(const std::string& key, double max, double min, bool withscores,
+      const reply_callback_t& reply_callback);
   std::future<reply> zrevrangebyscore(const std::string& key, double max, double min, bool withscores = false);
 
-  client& zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min, const reply_callback_t& reply_callback);
-  client& zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min, bool withscores = false);
+  client& zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min,
+      const reply_callback_t& reply_callback);
+  client& zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min,
+      bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min,
+      bool withscores = false);
 
-  client& zrevrangebyscore(const std::string& key, int max, int min, std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
-  client& zrevrangebyscore(const std::string& key, int max, int min, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrevrangebyscore(const std::string& key, int max, int min, std::size_t offset, std::size_t count, bool withscores = false);
+  client& zrevrangebyscore(const std::string& key, int max, int min, std::size_t offset, std::size_t count,
+      const reply_callback_t& reply_callback);
+  client& zrevrangebyscore(const std::string& key, int max, int min, std::size_t offset, std::size_t count,
+      bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrevrangebyscore(const std::string& key, int max, int min, std::size_t offset, std::size_t count,
+      bool withscores = false);
 
-  client& zrevrangebyscore(const std::string& key, double max, double min, std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
-  client& zrevrangebyscore(const std::string& key, double max, double min, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrevrangebyscore(const std::string& key, double max, double min, std::size_t offset, std::size_t count, bool withscores = false);
+  client& zrevrangebyscore(const std::string& key, double max, double min, std::size_t offset,
+      std::size_t count, const reply_callback_t& reply_callback);
+  client& zrevrangebyscore(const std::string& key, double max, double min, std::size_t offset,
+      std::size_t count, bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrevrangebyscore(const std::string& key, double max, double min, std::size_t offset,
+      std::size_t count, bool withscores = false);
 
-  client& zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min, std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
-  client& zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
-  std::future<reply> zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min, std::size_t offset, std::size_t count, bool withscores = false);
+  client& zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min,
+      std::size_t offset, std::size_t count, const reply_callback_t& reply_callback);
+  client& zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min,
+      std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
+  std::future<reply> zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min,
+      std::size_t offset, std::size_t count, bool withscores = false);
 
   client& zrevrank(const std::string& key, const std::string& member, const reply_callback_t& reply_callback);
   std::future<reply> zrevrank(const std::string& key, const std::string& member);
@@ -1290,20 +1481,25 @@ public:
   client& zscan(const std::string& key, std::size_t cursor, const reply_callback_t& reply_callback);
   std::future<reply> zscan(const std::string& key, std::size_t cursor);
 
-  client& zscan(const std::string& key, std::size_t cursor, const std::string& pattern, const reply_callback_t& reply_callback);
+  client& zscan(const std::string& key, std::size_t cursor, const std::string& pattern,
+      const reply_callback_t& reply_callback);
   std::future<reply> zscan(const std::string& key, std::size_t cursor, const std::string& pattern);
 
   client& zscan(const std::string& key, std::size_t cursor, std::size_t count, const reply_callback_t& reply_callback);
   std::future<reply> zscan(const std::string& key, std::size_t cursor, std::size_t count);
 
-  client& zscan(const std::string& key, std::size_t cursor, const std::string& pattern, std::size_t count, const reply_callback_t& reply_callback);
+  client& zscan(const std::string& key, std::size_t cursor, const std::string& pattern, std::size_t count,
+      const reply_callback_t& reply_callback);
   std::future<reply> zscan(const std::string& key, std::size_t cursor, const std::string& pattern, std::size_t count);
 
   client& zscore(const std::string& key, const std::string& member, const reply_callback_t& reply_callback);
   std::future<reply> zscore(const std::string& key, const std::string& member);
 
-  client& zunionstore(const std::string& destination, std::size_t numkeys, const std::vector<std::string>& keys, const std::vector<std::size_t> weights, aggregate_method method, const reply_callback_t& reply_callback);
-  std::future<reply> zunionstore(const std::string& destination, std::size_t numkeys, const std::vector<std::string>& keys, const std::vector<std::size_t> weights, aggregate_method method);
+  client& zunionstore(const std::string& destination, std::size_t numkeys,
+      const std::vector<std::string>& keys, const std::vector<std::size_t> weights,
+      aggregate_method method, const reply_callback_t& reply_callback);
+  std::future<reply> zunionstore(const std::string& destination, std::size_t numkeys,
+      const std::vector<std::string>& keys, const std::vector<std::size_t> weights, aggregate_method method);
 
 private:
   //! client kill impl
@@ -1333,19 +1529,25 @@ private:
 
 private:
   //! sort impl
-  client& sort(const std::string& key, const std::string& by_pattern, bool limit, std::size_t offset, std::size_t count, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha, const std::string& store_dest, const reply_callback_t& reply_callback);
+  client& sort(const std::string& key, const std::string& by_pattern, bool limit, std::size_t offset,
+      std::size_t count, const std::vector<std::string>& get_patterns, bool asc_order, bool alpha,
+      const std::string& store_dest, const reply_callback_t& reply_callback);
 
   //! zrevrangebyscore impl
-  client& zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min, bool limit, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
+  client& zrevrangebyscore(const std::string& key, const std::string& max, const std::string& min, bool limit,
+      std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
 
   //! zrangebyscore impl
-  client& zrangebyscore(const std::string& key, const std::string& min, const std::string& max, bool limit, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
+  client& zrangebyscore(const std::string& key, const std::string& min, const std::string& max, bool limit,
+      std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
 
   //! zrevrangebylex impl
-  client& zrevrangebylex(const std::string& key, const std::string& max, const std::string& min, bool limit, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
+  client& zrevrangebylex(const std::string& key, const std::string& max, const std::string& min, bool limit,
+      std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
 
   //! zrangebylex impl
-  client& zrangebylex(const std::string& key, const std::string& min, const std::string& max, bool limit, std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
+  client& zrangebylex(const std::string& key, const std::string& min, const std::string& max, bool limit,
+      std::size_t offset, std::size_t count, bool withscores, const reply_callback_t& reply_callback);
 
 private:
   //!
@@ -1375,99 +1577,99 @@ private:
   void try_commit(void);
 
   //! Execute a command on the client and tie the callback to a future
-  std::future<reply> exec_cmd(const std::function<client&(const reply_callback_t&)>& f);
+  std::future<reply> exec_cmd(const std::function<client&(const reply_callback_t&)>& task);
 
 private:
   //!
   //! struct to store commands information (command to be sent and callback to be called)
   //!
   struct command_request {
-    std::vector<std::string> command;
-    reply_callback_t callback;
+    std::vector<std::string>    vctCommand;
+    reply_callback_t            callback;
   };
 
 private:
   //!
   //! server we are connected to
   //!
-  std::string m_redis_server;
+  std::string                   m_sRedisServerHost;
   //!
   //! port we are connected to
   //!
-  std::size_t m_redis_port = 0;
+  std::size_t                   m_nRedisServerPort = 0;
   //!
   //! master name (if we are using sentinel) we are connected to
   //!
-  std::string m_master_name;
+  std::string                   m_sMasterName;
   //!
   //! password used to authenticate
   //!
-  std::string m_password;
+  std::string                   m_sPassword;
   //!
   //! selected redis db
   //!
-  int m_database_index = 0;
+  int                           m_nDatabaseIndex = 0;
 
   //!
   //! tcp client for redis connection
   //!
-  network::redis_connection m_client;
+  network::redis_connection     m_redisConnection;
 
   //!
   //! redis sentinel
   //!
-  cpp_redis::sentinel m_sentinel;
+  cpp_redis::sentinel           m_sentinel;
 
   //!
   //! max time to connect
   //!
-  std::uint32_t m_connect_timeout_msecs = 0;
+  std::uint32_t                 m_uConnectTimeoutMsecs = 0;
   //!
   //! max number of reconnection attemps
   //!
-  std::int32_t m_max_reconnects = 0;
+  std::int32_t                  m_nMaxReconnects = 0;
   //!
   //! current number of attemps to reconect
   //!
-  std::int32_t m_current_reconnect_attempts = 0;
+  std::int32_t                  m_nCurrentReconnectAttempts = 0;
   //!
   //! time between two reconnection attemps
   //!
-  std::uint32_t m_reconnect_interval_msecs = 0;
+  std::uint32_t                 m_uReconnectIntervalMsecs = 0;
 
   //!
   //! reconnection status
   //!
-  std::atomic_bool m_reconnecting;
+  std::atomic_bool              m_bReconnecting_a;
   //!
   //! to force cancel reconnection
   //!
-  std::atomic_bool m_cancel;
+  std::atomic_bool              m_bCancel_a;
 
   //!
   //! sent commands waiting to be executed
   //!
-  std::queue<command_request> m_commands;
+  std::queue<command_request>   m_queCommands;
 
   //!
   //! user defined connect status callback
   //!
-  connect_callback_t m_connect_callback;
+  connect_callback_t            m_callbackConnect;
 
   //!
   //!  callbacks thread safety
   //!
-  std::mutex m_callbacks_mutex;
+  std::mutex                    m_mtxCallbacks;
 
   //!
   //! condvar for callbacks updates
   //!
-  std::condition_variable m_sync_condvar;
+  std::condition_variable       m_cvSync;
 
   //!
   //! number of callbacks currently being running
   //!
-  std::atomic<unsigned int> m_callbacks_running;
+  std::atomic<unsigned int>     m_uRunningCallbacks_a;
 }; // namespace cpp_redis
 
 } // namespace cpp_redis

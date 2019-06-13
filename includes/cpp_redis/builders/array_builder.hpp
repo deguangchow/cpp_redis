@@ -88,27 +88,27 @@ private:
   //!
   //! builder used to fetch the array size
   //!
-  integer_builder m_int_builder;
+  integer_builder                   m_intBuilder;
 
   //!
   //! built array size
   //!
-  uint64_t m_array_size;
+  uint64_t                          m_uArraySize;
 
   //!
   //! current builder used to build current row
   //!
-  std::unique_ptr<builder_iface> m_current_builder;
+  std::unique_ptr<builder_iface>    m_ptrCurrentBuilder;
 
   //!
   //! whether the reply is ready or not
   //!
-  bool m_reply_ready;
+  bool                              m_bReplyReady;
 
   //!
   //! reply to be built (or built)
   //!
-  reply m_reply;
+  reply                             m_reply;
 };
 
 } // namespace builders

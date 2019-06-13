@@ -88,7 +88,7 @@ public:
 
 private:
   //!
-  //! build reply using m_buffer content
+  //! build reply using m_sBuffer content
   //!
   //! \return whether the reply has been fully built or not
   //!
@@ -98,17 +98,17 @@ private:
   //!
   //! buffer to be used to build data
   //!
-  std::string m_buffer;
+  std::string                       m_sBuffer;
 
   //!
   //! current builder used to build current reply
   //!
-  std::unique_ptr<builder_iface> m_builder;
+  std::unique_ptr<builder_iface>    m_ptrBuilder;
 
   //!
   //! queue of available (built) replies
   //!
-  std::deque<reply> m_available_replies;
+  std::deque<reply>                 m_deqAvailableReplies;
 };
 
 } // namespace builders

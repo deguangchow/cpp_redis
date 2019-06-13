@@ -28,29 +28,29 @@ namespace cpp_redis {
 namespace builders {
 
 simple_string_builder::simple_string_builder(void)
-: m_str("")
-, m_reply_ready(false) {}
+: m_sValue("")
+, m_bReplyReady(false) {}
 
 builder_iface&
 simple_string_builder::operator<<(std::string& buffer) {
-  if (m_reply_ready)
+  if (m_bReplyReady)
     return *this;
 
   auto end_sequence = buffer.find("\r\n");
   if (end_sequence == std::string::npos)
     return *this;
 
-  m_str = buffer.substr(0, end_sequence);
-  m_reply.set(m_str, reply::string_type::simple_string);
+  m_sValue = buffer.substr(0, end_sequence);
+  m_reply.set(m_sValue, reply::string_type::simple_string);
   buffer.erase(0, end_sequence + 2);
-  m_reply_ready = true;
+  m_bReplyReady = true;
 
   return *this;
 }
 
 bool
 simple_string_builder::reply_ready(void) const {
-  return m_reply_ready;
+  return m_bReplyReady;
 }
 
 reply
@@ -60,7 +60,7 @@ simple_string_builder::get_reply(void) const {
 
 const std::string&
 simple_string_builder::get_simple_string(void) const {
-  return m_str;
+  return m_sValue;
 }
 
 } // namespace builders

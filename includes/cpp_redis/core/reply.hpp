@@ -83,7 +83,7 @@ public:
   //!
   //! \param value integer value
   //!
-  reply(int64_t value);
+  explicit reply(int64_t value);
 
   //!
   //! ctor for array values
@@ -91,7 +91,7 @@ public:
   //! \param rows array reply
   //! \return current instance
   //!
-  reply(const std::vector<reply>& rows);
+  explicit reply(const std::vector<reply>& rows);
 
   //! dtor
   ~reply(void) = default;
@@ -150,7 +150,7 @@ public:
   //!
   //! convenience implicit conversion, same as !is_null() / ok()
   //!
-  operator bool(void) const;
+  operator bool() const;
 
 public:
   //!
@@ -216,10 +216,10 @@ public:
   type get_type(void) const;
 
 private:
-  type m_type;
-  std::vector<cpp_redis::reply> m_rows;
-  std::string m_strval;
-  int64_t m_intval;
+  type                          m_eType;
+  std::vector<cpp_redis::reply> m_vctRows;
+  std::string                   m_sValue;
+  int64_t                       m_nValue;
 };
 
 } // namespace cpp_redis

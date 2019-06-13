@@ -30,63 +30,62 @@ namespace cpp_redis {
 namespace builders {
 
 array_builder::array_builder(void)
-: m_current_builder(nullptr)
-, m_reply_ready(false)
+: m_ptrCurrentBuilder(nullptr)
+, m_bReplyReady(false)
 , m_reply(std::vector<reply>{}) {}
 
 bool
-array_builder::fetch_array_size(std::string& buffer) {
-  if (m_int_builder.reply_ready())
+array_builder::fetch_array_size(std::string& sBuffer) {
+  if (m_intBuilder.reply_ready())
     return true;
 
-  m_int_builder << buffer;
-  if (!m_int_builder.reply_ready())
+  m_intBuilder << sBuffer;
+  if (!m_intBuilder.reply_ready())
     return false;
 
-  int64_t size = m_int_builder.get_integer();
-  if (size < 0) {
+  int64_t nSize = m_intBuilder.get_integer();
+  if (nSize < 0) {
     m_reply.set();
-    m_reply_ready = true;
-  }
-  else if (size == 0) {
-    m_reply_ready = true;
+    m_bReplyReady = true;
+  } else if (nSize == 0) {
+    m_bReplyReady = true;
   }
 
-  m_array_size = size;
+  m_uArraySize = nSize;
 
   return true;
 }
 
 bool
-array_builder::build_row(std::string& buffer) {
-  if (!m_current_builder) {
-    m_current_builder = create_builder(buffer.front());
-    buffer.erase(0, 1);
+array_builder::build_row(std::string& sBuffer) {
+  if (!m_ptrCurrentBuilder) {
+    m_ptrCurrentBuilder = create_builder(sBuffer.front());
+    sBuffer.erase(0, 1);
   }
 
-  *m_current_builder << buffer;
-  if (!m_current_builder->reply_ready())
+  *m_ptrCurrentBuilder << sBuffer;
+  if (!m_ptrCurrentBuilder->reply_ready())
     return false;
 
-  m_reply << m_current_builder->get_reply();
-  m_current_builder = nullptr;
+  m_reply << m_ptrCurrentBuilder->get_reply();
+  m_ptrCurrentBuilder = nullptr;
 
-  if (m_reply.as_array().size() == m_array_size)
-    m_reply_ready = true;
+  if (m_reply.as_array().size() == m_uArraySize)
+    m_bReplyReady = true;
 
   return true;
 }
 
 builder_iface&
-array_builder::operator<<(std::string& buffer) {
-  if (m_reply_ready)
+array_builder::operator<<(std::string& sBuffer) {
+  if (m_bReplyReady)
     return *this;
 
-  if (!fetch_array_size(buffer))
+  if (!fetch_array_size(sBuffer))
     return *this;
 
-  while (buffer.size() && !m_reply_ready)
-    if (!build_row(buffer))
+  while (sBuffer.size() && !m_bReplyReady)
+    if (!build_row(sBuffer))
       return *this;
 
   return *this;
@@ -94,7 +93,7 @@ array_builder::operator<<(std::string& buffer) {
 
 bool
 array_builder::reply_ready(void) const {
-  return m_reply_ready;
+  return m_bReplyReady;
 }
 
 reply

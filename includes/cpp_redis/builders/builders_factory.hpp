@@ -41,7 +41,7 @@ namespace builders {
 //! \param id char that determines which builder to return
 //! \return new builder instance depending on id value
 //!
-std::unique_ptr<builder_iface> create_builder(char id);
+std::unique_ptr<builder_iface> create_builder(char cId);
 
 } // namespace builders
 

@@ -49,14 +49,15 @@ public:
   //! \param port port to be connected to
   //! \param timeout_msecs max time to connect in ms
   //!
-  void connect(const std::string& addr, std::uint32_t port, std::uint32_t timeout_msecs);
+  void connect(const std::string& sAddr, std::uint32_t uPort, std::uint32_t uTimeoutMsecs);
 
   //!
   //! stop the tcp client
   //!
-  //! \param wait_for_removal when sets to true, disconnect blocks until the underlying TCP client has been effectively removed from the io_service and that all the underlying callbacks have completed.
+  //! \param wait_for_removal when sets to true, disconnect blocks until the underlying TCP client has been
+  //! effectively removed from the io_service and that all the underlying callbacks have completed.
   //!
-  void disconnect(bool wait_for_removal = false);
+  void disconnect(bool bWaitForRemoval = false);
 
   //!
   //! \return whether the client is currently connected or not
@@ -68,7 +69,7 @@ public:
   //!
   //! \param nb_threads number of threads to be assigned
   //!
-  void set_nb_workers(std::size_t nb_threads);
+  void set_nb_workers(std::size_t nNbThreads);
 
 public:
   //!
@@ -76,14 +77,14 @@ public:
   //!
   //! \param request information about what should be read and what should be done after completion
   //!
-  void async_read(read_request& request);
+  void async_read(read_request& requestRead);
 
   //!
   //! async write operation
   //!
   //! \param request information about what should be written and what should be done after completion
   //!
-  void async_write(write_request& request);
+  void async_write(write_request& requestWrite);
 
 public:
   //!
@@ -91,13 +92,13 @@ public:
   //!
   //! \param disconnection_handler handler to be called in case of a disconnection
   //!
-  void set_on_disconnection_handler(const disconnection_handler_t& disconnection_handler);
+  void set_on_disconnection_handler(const disconnection_handler_t& handlerDisconnection);
 
 private:
   //!
   //! tcp client for redis connection
   //!
-  tacopie::tcp_client m_client;
+  tacopie::tcp_client           m_tcpClient;
 };
 
 //!

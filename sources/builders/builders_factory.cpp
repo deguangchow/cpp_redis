@@ -34,8 +34,8 @@ namespace cpp_redis {
 namespace builders {
 
 std::unique_ptr<builder_iface>
-create_builder(char id) {
-  switch (id) {
+create_builder(char cId) {
+  switch (cId) {
   case '+':
     return std::unique_ptr<simple_string_builder>{new simple_string_builder()};
   case '-':

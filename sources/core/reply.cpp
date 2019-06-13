@@ -26,19 +26,19 @@
 namespace cpp_redis {
 
 reply::reply(void)
-: m_type(type::null) {}
+: m_eType(type::null) {}
 
 reply::reply(const std::string& value, string_type reply_type)
-: m_type(static_cast<type>(reply_type))
-, m_strval(value) {}
+: m_eType(static_cast<type>(reply_type))
+, m_sValue(value) {}
 
 reply::reply(int64_t value)
-: m_type(type::integer)
-, m_intval(value) {}
+: m_eType(type::integer)
+, m_nValue(value) {}
 
 reply::reply(const std::vector<reply>& rows)
-: m_type(type::array)
-, m_rows(rows) {}
+: m_eType(type::array)
+, m_vctRows(rows) {}
 
 bool
 reply::ok(void) const {
@@ -58,44 +58,44 @@ reply::error(void) const {
   return as_string();
 }
 
-reply::operator bool(void) const {
+reply::operator bool() const {
   return !is_error() && !is_null();
 }
 
 void
 reply::set(void) {
-  m_type = type::null;
+  m_eType = type::null;
 }
 
 void
 reply::set(const std::string& value, string_type reply_type) {
-  m_type   = static_cast<type>(reply_type);
-  m_strval = value;
+  m_eType   = static_cast<type>(reply_type);
+  m_sValue = value;
 }
 
 void
 reply::set(int64_t value) {
-  m_type   = type::integer;
-  m_intval = value;
+  m_eType   = type::integer;
+  m_nValue = value;
 }
 
 void
 reply::set(const std::vector<reply>& rows) {
-  m_type = type::array;
-  m_rows = rows;
+  m_eType = type::array;
+  m_vctRows = rows;
 }
 
 reply&
 reply::operator<<(const reply& reply) {
-  m_type = type::array;
-  m_rows.push_back(reply);
+  m_eType = type::array;
+  m_vctRows.push_back(reply);
 
   return *this;
 }
 
 bool
 reply::is_array(void) const {
-  return m_type == type::array;
+  return m_eType == type::array;
 }
 
 bool
@@ -105,27 +105,27 @@ reply::is_string(void) const {
 
 bool
 reply::is_simple_string(void) const {
-  return m_type == type::simple_string;
+  return m_eType == type::simple_string;
 }
 
 bool
 reply::is_bulk_string(void) const {
-  return m_type == type::bulk_string;
+  return m_eType == type::bulk_string;
 }
 
 bool
 reply::is_error(void) const {
-  return m_type == type::error;
+  return m_eType == type::error;
 }
 
 bool
 reply::is_integer(void) const {
-  return m_type == type::integer;
+  return m_eType == type::integer;
 }
 
 bool
 reply::is_null(void) const {
-  return m_type == type::null;
+  return m_eType == type::null;
 }
 
 const std::vector<reply>&
@@ -133,7 +133,7 @@ reply::as_array(void) const {
   if (!is_array())
     throw cpp_redis::redis_error("Reply is not an array");
 
-  return m_rows;
+  return m_vctRows;
 }
 
 const std::string&
@@ -141,7 +141,7 @@ reply::as_string(void) const {
   if (!is_string())
     throw cpp_redis::redis_error("Reply is not a string");
 
-  return m_strval;
+  return m_sValue;
 }
 
 int64_t
@@ -149,12 +149,12 @@ reply::as_integer(void) const {
   if (!is_integer())
     throw cpp_redis::redis_error("Reply is not an integer");
 
-  return m_intval;
+  return m_nValue;
 }
 
 reply::type
 reply::get_type(void) const {
-  return m_type;
+  return m_eType;
 }
 
 } // namespace cpp_redis

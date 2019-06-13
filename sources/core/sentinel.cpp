@@ -29,52 +29,53 @@ namespace cpp_redis {
 
 #ifndef __CPP_REDIS_USE_CUSTOM_TCP_CLIENT
 sentinel::sentinel(void)
-: m_callbacks_running(0) {
+: m_nRunningCallbacks_a(0) {
   __CPP_REDIS_LOG(debug, "cpp_redis::sentinel created");
 }
 #endif /* __CPP_REDIS_USE_CUSTOM_TCP_CLIENT */
 
-sentinel::sentinel(const std::shared_ptr<network::tcp_client_iface>& tcp_client)
-: m_client(tcp_client)
-, m_callbacks_running(0) {
+sentinel::sentinel(const std::shared_ptr<network::tcp_client_iface>& ptrTcpClient)
+: m_redisConnection(ptrTcpClient)
+, m_nRunningCallbacks_a(0) {
   __CPP_REDIS_LOG(debug, "cpp_redis::sentinel created");
 }
 
 sentinel::~sentinel(void) {
-  m_sentinels.clear();
-  if (m_client.is_connected())
-    m_client.disconnect(true);
+  m_vctSentinels.clear();
+  if (m_redisConnection.is_connected())
+    m_redisConnection.disconnect(true);
   __CPP_REDIS_LOG(debug, "cpp_redis::sentinel destroyed");
 }
 
 sentinel&
-sentinel::add_sentinel(const std::string& host, std::size_t port, std::uint32_t timeout_msecs) {
-  m_sentinels.push_back({host, port, timeout_msecs});
+sentinel::add_sentinel(const std::string& sHost, std::size_t nPort, std::uint32_t uTimeoutMsecs) {
+  m_vctSentinels.push_back({sHost, nPort, uTimeoutMsecs});
   return *this;
 }
 
 void
 sentinel::clear_sentinels() {
-  m_sentinels.clear();
+  m_vctSentinels.clear();
 }
 
 bool
-sentinel::get_master_addr_by_name(const std::string& name, std::string& host, std::size_t& port, bool autoconnect) {
+sentinel::get_master_addr_by_name(const std::string& sSentinelName, std::string& sHost, std::size_t& nPort,
+    bool bAutoConnect) {
   //! reset connection settings
-  host = "";
-  port = 0;
+  sHost = "";
+  nPort = 0;
 
   //! we must have some sentinels to connect to if we are in autoconnect mode
-  if (autoconnect && m_sentinels.size() == 0) {
+  if (bAutoConnect && m_vctSentinels.size() == 0) {
     throw redis_error("No sentinels available. Call add_sentinel() before get_master_addr_by_name()");
   }
 
   //! if we are not connected and we are not in autoconnect mode, we can't go further in the process
-  if (!autoconnect && !is_connected()) {
+  if (!bAutoConnect && !is_connected()) {
     throw redis_error("No sentinel connected. Call connect() first or enable autoconnect.");
   }
 
-  if (autoconnect) {
+  if (bAutoConnect) {
     try {
       //! Will round robin all attached sentinels until it finds one that is online.
       connect_sentinel(nullptr);
@@ -90,79 +91,81 @@ sentinel::get_master_addr_by_name(const std::string& name, std::string& host, st
 
   //! By now we have a connection to a redis sentinel.
   //! Ask it who the master is.
-  send({"SENTINEL", "get-master-addr-by-name", name}, [&](cpp_redis::reply& reply) {
+  send({"SENTINEL", "get-master-addr-by-name", sSentinelName}, [&](cpp_redis::reply& reply) {
     if (reply.is_array()) {
-      auto arr = reply.as_array();
-      host     = arr[0].as_string();
-      port     = std::stoi(arr[1].as_string(), nullptr, 10);
+      auto arr  = reply.as_array();
+      sHost     = arr[0].as_string();
+      nPort     = std::stoi(arr[1].as_string(), nullptr, 10);
     }
   });
   sync_commit();
 
   //! We always close any open connection in auto connect mode
   //! since the sentinel may not be around next time we ask who the master is.
-  if (autoconnect) {
+  if (bAutoConnect) {
     disconnect(true);
   }
 
-  return port != 0;
+  return nPort != 0;
 }
 
 void
-sentinel::connect_sentinel(const sentinel_disconnect_handler_t& sentinel_disconnect_handler) {
-  if (m_sentinels.size() == 0) {
+sentinel::connect_sentinel(const sentinel_disconnect_handler_t& handlerSentinelDisconnect) {
+  if (m_vctSentinels.size() == 0) {
     throw redis_error("No sentinels available. Call add_sentinel() before connect_sentinel()");
   }
 
-  auto disconnect_handler = std::bind(&sentinel::connection_disconnect_handler, this, std::placeholders::_1);
-  auto receive_handler    = std::bind(&sentinel::connection_receive_handler, this, std::placeholders::_1, std::placeholders::_2);
+  auto const& handlerDisconnect = std::bind(&sentinel::connection_disconnect_handler, this, std::placeholders::_1);
+  auto const& handlerReceive    = std::bind(&sentinel::connection_receive_handler, this, std::placeholders::_1,
+      std::placeholders::_2);
 
   //! Now try to connect to first sentinel
-  std::vector<sentinel_def>::iterator it = m_sentinels.begin();
-  bool not_connected                     = true;
+  auto pos              = m_vctSentinels.begin();
+  bool bNotConnected    = true;
 
-  while (not_connected && it != m_sentinels.end()) {
+  while (bNotConnected && pos != m_vctSentinels.end()) {
     try {
-      __CPP_REDIS_LOG(debug, std::string("cpp_redis::sentinel attempting to connect to host ") + it->get_host());
-      m_client.connect(it->get_host(), it->get_port(), disconnect_handler, receive_handler, it->get_timeout_msecs());
+      __CPP_REDIS_LOG(debug, std::string("cpp_redis::sentinel attempting to connect to host ") + pos->get_host());
+      m_redisConnection.connect(pos->get_host(), pos->get_port(), handlerDisconnect, handlerReceive,
+          pos->get_timeout_msecs());
     }
     catch (const redis_error&) {
-      __CPP_REDIS_LOG(info, std::string("cpp_redis::sentinel unable to connect to sentinel host ") + it->get_host());
+      __CPP_REDIS_LOG(info, std::string("cpp_redis::sentinel unable to connect to sentinel host ") + pos->get_host());
     }
 
     if (is_connected()) {
-      not_connected = false;
-      __CPP_REDIS_LOG(info, std::string("cpp_redis::sentinel connected ok to host ") + it->get_host());
-    }
-    else {
+      bNotConnected = false;
+      __CPP_REDIS_LOG(info, std::string("cpp_redis::sentinel connected ok to host ") + pos->get_host());
+    } else {
       //! Make sure its closed.
       disconnect(true);
       //! Could not connect.  Try the next sentinel.
-      ++it;
+      ++pos;
     }
   }
 
-  if (not_connected) {
+  if (bNotConnected) {
     throw redis_error("Unable to connect to any sentinels");
   }
 
-  m_disconnect_handler = sentinel_disconnect_handler;
+  m_handlerDisconnect = handlerSentinelDisconnect;
 }
 
 void
-sentinel::connect(const std::string& host, std::size_t port,
-  const sentinel_disconnect_handler_t& sentinel_disconnect_handler,
-  std::uint32_t timeout_msecs) {
+sentinel::connect(const std::string& sHost, std::size_t nPort,
+  const sentinel_disconnect_handler_t& handlerDisconnect,
+  std::uint32_t uTimeoutMsecs) {
   __CPP_REDIS_LOG(debug, "cpp_redis::sentinel attempts to connect");
 
-  auto disconnect_handler = std::bind(&sentinel::connection_disconnect_handler, this, std::placeholders::_1);
-  auto receive_handler    = std::bind(&sentinel::connection_receive_handler, this, std::placeholders::_1, std::placeholders::_2);
+  auto handlerClientDisconnect  = std::bind(&sentinel::connection_disconnect_handler, this, std::placeholders::_1);
+  auto handlerReceive           = std::bind(&sentinel::connection_receive_handler, this, std::placeholders::_1,
+      std::placeholders::_2);
 
-  m_client.connect(host, port, disconnect_handler, receive_handler, timeout_msecs);
+  m_redisConnection.connect(sHost, nPort, handlerClientDisconnect, handlerReceive, uTimeoutMsecs);
 
   __CPP_REDIS_LOG(info, "cpp_redis::sentinel connected");
 
-  m_disconnect_handler = sentinel_disconnect_handler;
+  m_handlerDisconnect = handlerDisconnect;
 }
 
 void
@@ -171,12 +174,12 @@ sentinel::connection_receive_handler(network::redis_connection&, reply& reply) {
 
   __CPP_REDIS_LOG(info, "cpp_redis::sentinel received reply");
   {
-    std::lock_guard<std::mutex> lock(m_callbacks_mutex);
-    m_callbacks_running += 1;
+    std::lock_guard<std::mutex> lock(m_mtxCallbacks);
+    m_nRunningCallbacks_a += 1;
 
-    if (m_callbacks.size()) {
-      callback = m_callbacks.front();
-      m_callbacks.pop();
+    if (m_queCallbacks.size()) {
+      callback = m_queCallbacks.front();
+      m_queCallbacks.pop();
     }
   }
 
@@ -186,27 +189,27 @@ sentinel::connection_receive_handler(network::redis_connection&, reply& reply) {
   }
 
   {
-    std::lock_guard<std::mutex> lock(m_callbacks_mutex);
-    m_callbacks_running -= 1;
-    m_sync_condvar.notify_all();
+    std::lock_guard<std::mutex> lock(m_mtxCallbacks);
+    m_nRunningCallbacks_a -= 1;
+    m_cvSync.notify_all();
   }
 }
 
 void
 sentinel::clear_callbacks(void) {
-  std::lock_guard<std::mutex> lock(m_callbacks_mutex);
+  std::lock_guard<std::mutex> lock(m_mtxCallbacks);
 
   std::queue<reply_callback_t> empty;
-  std::swap(m_callbacks, empty);
+  std::swap(m_queCallbacks, empty);
 
-  m_sync_condvar.notify_all();
+  m_cvSync.notify_all();
 }
 
 void
 sentinel::call_disconnect_handler(void) {
-  if (m_disconnect_handler) {
+  if (m_handlerDisconnect) {
     __CPP_REDIS_LOG(info, "cpp_redis::sentinel calls disconnect handler");
-    m_disconnect_handler(*this);
+    m_handlerDisconnect(*this);
   }
 }
 
@@ -218,34 +221,34 @@ sentinel::connection_disconnect_handler(network::redis_connection&) {
 }
 
 void
-sentinel::disconnect(bool wait_for_removal) {
+sentinel::disconnect(bool bWaitForRemoval) {
   __CPP_REDIS_LOG(debug, "cpp_redis::sentinel attempts to disconnect");
-  m_client.disconnect(wait_for_removal);
+  m_redisConnection.disconnect(bWaitForRemoval);
   __CPP_REDIS_LOG(info, "cpp_redis::sentinel disconnected");
 }
 
 bool
 sentinel::is_connected(void) {
-  return m_client.is_connected();
+  return m_redisConnection.is_connected();
 }
 
 const std::vector<sentinel::sentinel_def>&
 sentinel::get_sentinels(void) const {
-  return m_sentinels;
+  return m_vctSentinels;
 }
 
 std::vector<sentinel::sentinel_def>&
 sentinel::get_sentinels(void) {
-  return m_sentinels;
+  return m_vctSentinels;
 }
 
 sentinel&
-sentinel::send(const std::vector<std::string>& redis_cmd, const reply_callback_t& callback) {
-  std::lock_guard<std::mutex> lock_callback(m_callbacks_mutex);
+sentinel::send(const std::vector<std::string>& sRedisCmd, const reply_callback_t& callback) {
+  std::lock_guard<std::mutex> ulockCallback(m_mtxCallbacks);
 
   __CPP_REDIS_LOG(info, "cpp_redis::sentinel attempts to store new command in the send buffer");
-  m_client.send(redis_cmd);
-  m_callbacks.push(callback);
+  m_redisConnection.send(sRedisCmd);
+  m_queCallbacks.push(callback);
   __CPP_REDIS_LOG(info, "cpp_redis::sentinel stored new command in the send buffer");
 
   return *this;
@@ -262,9 +265,9 @@ sentinel::commit(void) {
 sentinel&
 sentinel::sync_commit() {
   try_commit();
-  std::unique_lock<std::mutex> lock_callback(m_callbacks_mutex);
+  std::unique_lock<std::mutex> ulockCallback(m_mtxCallbacks);
   __CPP_REDIS_LOG(debug, "cpp_redis::sentinel waiting for callbacks to complete");
-  m_sync_condvar.wait(lock_callback, [=] { return m_callbacks_running == 0 && m_callbacks.empty(); });
+  m_cvSync.wait(ulockCallback, [=] { return m_nRunningCallbacks_a == 0 && m_queCallbacks.empty(); });
   __CPP_REDIS_LOG(debug, "cpp_redis::sentinel finished waiting for callback completion");
   return *this;
 }
@@ -273,7 +276,7 @@ void
 sentinel::try_commit(void) {
   try {
     __CPP_REDIS_LOG(debug, "cpp_redis::sentinel attempts to send pipelined commands");
-    m_client.commit();
+    m_redisConnection.commit();
     __CPP_REDIS_LOG(info, "cpp_redis::sentinel sent pipelined commands");
   }
   catch (const cpp_redis::redis_error& e) {
@@ -357,4 +360,5 @@ sentinel::set(const std::string& name, const std::string& option, const std::str
   return *this;
 }
 
-} //! cpp_redis
+} //namespace cpp_redis
+

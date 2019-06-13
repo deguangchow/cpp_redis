@@ -79,8 +79,7 @@ subscriber::connect(
   //! We rely on the sentinel to tell us which redis server is currently the master.
   if (m_sentinel.get_master_addr_by_name(name, m_redis_server, m_redis_port, true)) {
     connect(m_redis_server, m_redis_port, connect_callback, timeout_msecs, max_reconnects, reconnect_interval_msecs);
-  }
-  else {
+  } else {
     throw redis_error("cpp_redis::subscriber::connect() could not find master for name " + name);
   }
 }
@@ -108,7 +107,8 @@ subscriber::connect(
   }
 
   auto disconnection_handler = std::bind(&subscriber::connection_disconnection_handler, this, std::placeholders::_1);
-  auto receive_handler       = std::bind(&subscriber::connection_receive_handler, this, std::placeholders::_1, std::placeholders::_2);
+  auto receive_handler       = std::bind(&subscriber::connection_receive_handler, this, std::placeholders::_1,
+      std::placeholders::_2);
   m_client.connect(host, port, disconnection_handler, receive_handler, timeout_msecs);
 
   //! notify end
@@ -176,7 +176,8 @@ subscriber::is_reconnecting(void) const {
 }
 
 subscriber&
-subscriber::subscribe(const std::string& channel, const subscribe_callback_t& callback, const acknowledgement_callback_t& acknowledgement_callback) {
+subscriber::subscribe(const std::string& channel, const subscribe_callback_t& callback,
+    const acknowledgement_callback_t& acknowledgement_callback) {
   std::lock_guard<std::mutex> lock(m_subscribed_channels_mutex);
 
   __CPP_REDIS_LOG(debug, "cpp_redis::subscriber attemps to subscribe to channel " + channel);
@@ -187,13 +188,15 @@ subscriber::subscribe(const std::string& channel, const subscribe_callback_t& ca
 }
 
 void
-subscriber::unprotected_subscribe(const std::string& channel, const subscribe_callback_t& callback, const acknowledgement_callback_t& acknowledgement_callback) {
+subscriber::unprotected_subscribe(const std::string& channel, const subscribe_callback_t& callback,
+    const acknowledgement_callback_t& acknowledgement_callback) {
   m_subscribed_channels[channel] = {callback, acknowledgement_callback};
   m_client.send({"SUBSCRIBE", channel});
 }
 
 subscriber&
-subscriber::psubscribe(const std::string& pattern, const subscribe_callback_t& callback, const acknowledgement_callback_t& acknowledgement_callback) {
+subscriber::psubscribe(const std::string& pattern, const subscribe_callback_t& callback,
+    const acknowledgement_callback_t& acknowledgement_callback) {
   std::lock_guard<std::mutex> lock(m_psubscribed_channels_mutex);
 
   __CPP_REDIS_LOG(debug, "cpp_redis::subscriber attemps to psubscribe to channel " + pattern);
@@ -204,7 +207,8 @@ subscriber::psubscribe(const std::string& pattern, const subscribe_callback_t& c
 }
 
 void
-subscriber::unprotected_psubscribe(const std::string& pattern, const subscribe_callback_t& callback, const acknowledgement_callback_t& acknowledgement_callback) {
+subscriber::unprotected_psubscribe(const std::string& pattern, const subscribe_callback_t& callback,
+    const acknowledgement_callback_t& acknowledgement_callback) {
   m_psubscribed_channels[pattern] = {callback, acknowledgement_callback};
   m_client.send({"PSUBSCRIBE", pattern});
 }
@@ -261,7 +265,8 @@ subscriber::commit(void) {
 }
 
 void
-subscriber::call_acknowledgement_callback(const std::string& channel, const std::map<std::string, callback_holder>& channels, std::mutex& channels_mtx, int64_t nb_chans) {
+subscriber::call_acknowledgement_callback(const std::string& channel, const std::map<std::string,
+    callback_holder>& channels, std::mutex& channels_mtx, int64_t nb_chans) {
   std::lock_guard<std::mutex> lock(channels_mtx);
 
   auto it = channels.find(channel);
@@ -289,9 +294,11 @@ subscriber::handle_acknowledgement_reply(const std::vector<reply>& reply) {
     return;
 
   if (title.as_string() == "subscribe")
-    call_acknowledgement_callback(channel.as_string(), m_subscribed_channels, m_subscribed_channels_mutex, nb_chans.as_integer());
+    call_acknowledgement_callback(channel.as_string(), m_subscribed_channels, m_subscribed_channels_mutex,
+        nb_chans.as_integer());
   else if (title.as_string() == "psubscribe")
-    call_acknowledgement_callback(channel.as_string(), m_psubscribed_channels, m_psubscribed_channels_mutex, nb_chans.as_integer());
+    call_acknowledgement_callback(channel.as_string(), m_psubscribed_channels, m_psubscribed_channels_mutex,
+        nb_chans.as_integer());
 }
 
 void
@@ -399,7 +406,8 @@ subscriber::connection_disconnection_handler(network::redis_connection&) {
     m_connect_callback(m_redis_server, m_redis_port, connect_state::dropped);
   }
 
-  //! Lock the callbacks mutex of the base class to prevent more subscriber commands from being issued until our reconnect has completed.
+  //! Lock the callbacks mutex of the base class to prevent more subscriber commands from being issued until our
+  //! reconnect has completed.
   std::lock_guard<std::mutex> sub_lock_callback(m_subscribed_channels_mutex);
   std::lock_guard<std::mutex> psub_lock_callback(m_psubscribed_channels_mutex);
 
@@ -451,7 +459,8 @@ subscriber::reconnect(void) {
   ++m_current_reconnect_attempts;
 
   //! We rely on the sentinel to tell us which redis server is currently the master.
-  if (!m_master_name.empty() && !m_sentinel.get_master_addr_by_name(m_master_name, m_redis_server, m_redis_port, true)) {
+  if (!m_master_name.empty() && !m_sentinel.get_master_addr_by_name(m_master_name, m_redis_server, m_redis_port,
+      true)) {
     if (m_connect_callback) {
       m_connect_callback(m_redis_server, m_redis_port, connect_state::lookup_failed);
     }
@@ -460,7 +469,8 @@ subscriber::reconnect(void) {
 
   //! Try catch block because the redis subscriber throws an error if connection cannot be made.
   try {
-    connect(m_redis_server, m_redis_port, m_connect_callback, m_connect_timeout_msecs, m_max_reconnects, m_reconnect_interval_msecs);
+    connect(m_redis_server, m_redis_port, m_connect_callback, m_connect_timeout_msecs, m_max_reconnects,
+        m_reconnect_interval_msecs);
   }
   catch (...) {
   }
@@ -507,11 +517,11 @@ subscriber::re_auth(void) {
   auth(m_password, [&](cpp_redis::reply& reply) {
     if (reply.is_string() && reply.as_string() == "OK") {
       __CPP_REDIS_LOG(warn, "subscriber successfully re-authenticated");
-    }
-    else {
+    } else {
       __CPP_REDIS_LOG(warn, std::string("subscriber failed to re-authenticate: " + reply.as_string()).c_str());
     }
   });
 }
 
-} //! cpp_redis
+} //namespace cpp_redis
+
